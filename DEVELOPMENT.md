@@ -75,10 +75,10 @@ The project is designed to be easily extensible. All providers are auto-discover
 ### Steps
 
 1.  **Create a new package**:
-    Create a new directory under `internal/adapter/provider/` (e.g., `internal/adapter/provider/myprovider/`).
+    Create a new directory under `internal/domain/provider/` (e.g., `internal/domain/provider/myprovider/`).
 
-2.  **Implement the `domain.Provider` interface**:
-    The interface is defined in `internal/domain/domain.go`:
+2.  **Implement the `service.Provider` interface**:
+    The interface is defined in `internal/service/metadata.go`:
 
     ```go
     type Provider interface {
@@ -88,45 +88,45 @@ The project is designed to be easily extensible. All providers are auto-discover
     }
     ```
 
-    At minimum, create a constructor that returns `domain.Provider`:
+    At minimum, create a constructor that returns `service.Provider`:
 
     ```go
-    // internal/adapter/provider/myprovider/scraper.go
+    // internal/domain/provider/myprovider/scraper.go
     package myprovider
 
     import (
         "context"
         "time"
 
-        "audiobookshelf-asmr-provider/internal/domain"
+        "audiobookshelf-asmr-provider/internal/service"
     )
 
     type myFetcher struct{}
 
-    func NewMyFetcher() domain.Provider {
+    func NewMyFetcher() service.Provider {
         return &myFetcher{}
     }
 
     func (f *myFetcher) ID() string                { return "myprovider" }
     func (f *myFetcher) CacheTTL() time.Duration   { return 24 * time.Hour }
-    func (f *myFetcher) Search(ctx context.Context, query string) ([]domain.AbsBookMetadata, error) {
+    func (f *myFetcher) Search(ctx context.Context, query string) ([]service.AbsBookMetadata, error) {
         // your scraping / API logic here
         return nil, nil
     }
     ```
 
 3.  **Register in the provider registry**:
-    Open `internal/adapter/provider/registry.go` and add your provider to the `NewAll()` function:
+    Open `internal/domain/provider/registry.go` and add your provider to the `NewAll()` function:
 
     ```go
     import (
-        "audiobookshelf-asmr-provider/internal/adapter/provider/dlsite"
-        "audiobookshelf-asmr-provider/internal/adapter/provider/myprovider"
-        "audiobookshelf-asmr-provider/internal/domain"
+        "audiobookshelf-asmr-provider/internal/domain/provider/dlsite"
+        "audiobookshelf-asmr-provider/internal/domain/provider/myprovider"
+        "audiobookshelf-asmr-provider/internal/service"
     )
 
-    func NewAll() []domain.Provider {
-        return []domain.Provider{
+    func NewAll() []service.Provider {
+        return []service.Provider{
             dlsite.NewDLsiteFetcher(),
             myprovider.NewMyFetcher(), // ← add here
         }

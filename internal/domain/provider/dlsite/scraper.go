@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"audiobookshelf-asmr-provider/internal/domain"
-
 	"github.com/PuerkitoBio/goquery"
+
+	"audiobookshelf-asmr-provider/internal/service"
 )
 
 type dlsiteFetcher struct {
@@ -18,7 +18,7 @@ type dlsiteFetcher struct {
 }
 
 // NewDLsiteFetcher creates a new instance of the DLsite provider.
-func NewDLsiteFetcher() domain.Provider {
+func NewDLsiteFetcher() service.Provider {
 	return &dlsiteFetcher{
 		client: &http.Client{
 			Timeout: 30 * time.Second,
@@ -38,13 +38,13 @@ func (f *dlsiteFetcher) CacheTTL() time.Duration {
 }
 
 // Search searches for works matching the query. Currently only supports RJ codes.
-func (f *dlsiteFetcher) Search(ctx context.Context, query string) ([]domain.AbsBookMetadata, error) {
+func (f *dlsiteFetcher) Search(ctx context.Context, query string) ([]service.AbsBookMetadata, error) {
 	if rj, err := NewRJCode(query); err == nil {
 		work, err := f.getWorkByID(ctx, rj)
 		if err != nil {
 			return nil, err
 		}
-		return []domain.AbsBookMetadata{f.toAbsMetadata(work)}, nil
+		return []service.AbsBookMetadata{f.toAbsMetadata(work)}, nil
 	}
 	// Keyword search implementation would go here
 	return nil, nil
@@ -135,8 +135,8 @@ func (f *dlsiteFetcher) extractTableData(doc *goquery.Document, work *AsmrWork) 
 	})
 }
 
-func (f *dlsiteFetcher) toAbsMetadata(work AsmrWork) domain.AbsBookMetadata {
-	return domain.AbsBookMetadata{
+func (f *dlsiteFetcher) toAbsMetadata(work AsmrWork) service.AbsBookMetadata {
+	return service.AbsBookMetadata{
 		Title:         work.Title,
 		Author:        work.Circle,
 		Narrator:      strings.Join(work.CV, ", "),

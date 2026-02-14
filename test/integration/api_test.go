@@ -8,15 +8,14 @@ import (
 	"testing"
 	"time"
 
-	httphandler "audiobookshelf-asmr-provider/internal/adapter/http"
-	"audiobookshelf-asmr-provider/internal/domain"
+	"audiobookshelf-asmr-provider/internal/handler"
 	"audiobookshelf-asmr-provider/internal/service"
 )
 
 // MockProvider for integration test
 type MockProvider struct {
 	IDVal         string
-	SearchResults []domain.AbsBookMetadata
+	SearchResults []service.AbsBookMetadata
 	SearchErr     error
 }
 
@@ -24,7 +23,7 @@ func (m *MockProvider) ID() string {
 	return m.IDVal
 }
 
-func (m *MockProvider) Search(ctx context.Context, query string) ([]domain.AbsBookMetadata, error) {
+func (m *MockProvider) Search(_ context.Context, _ string) ([]service.AbsBookMetadata, error) {
 	return m.SearchResults, m.SearchErr
 }
 
@@ -32,9 +31,14 @@ func (m *MockProvider) CacheTTL() time.Duration {
 	return 1 * time.Hour
 }
 
+// integrationCache implements service.Cache for integration tests.
+type integrationCache struct{}
+
+func (i *integrationCache) Get(_ string) ([]service.AbsBookMetadata, bool)             { return nil, false }
+func (i *integrationCache) Put(_ string, _ []service.AbsBookMetadata, _ time.Duration) {}
+
 func TestAPI_Search_Integration(t *testing.T) {
-	// 1. Setup Dependencies
-	mockData := []domain.AbsBookMetadata{
+	mockData := []service.AbsBookMetadata{
 		{
 			Title:     "Integration Test Title",
 			ISBN:      "RJ123456",
@@ -46,15 +50,15 @@ func TestAPI_Search_Integration(t *testing.T) {
 		SearchResults: mockData,
 	}
 
-	svc := service.NewService(mockProvider)
-	handler := httphandler.NewHandler(svc)
+	svc := service.NewService(&integrationCache{}, mockProvider)
+	h := handler.NewHandler(svc)
 
 	// 2. Setup Test Server (The API we are testing)
 	mux := http.NewServeMux()
 	// Register the routes as Main does
-	mux.HandleFunc("/api/search", handler.Search)
+	mux.HandleFunc("/api/search", h.Search)
 	mux.HandleFunc("/api/dlsite/search", func(w http.ResponseWriter, r *http.Request) {
-		handler.SearchSingle(w, r, "dlsite")
+		h.SearchSingle(w, r, "dlsite")
 	})
 
 	server := httptest.NewServer(mux)
@@ -72,7 +76,7 @@ func TestAPI_Search_Integration(t *testing.T) {
 		t.Errorf("Expected status 200, got %d", resp.StatusCode)
 	}
 
-	var result domain.AbsMetadataResponse
+	var result service.AbsMetadataResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("Failed to decode JSON: %v", err)
 	}

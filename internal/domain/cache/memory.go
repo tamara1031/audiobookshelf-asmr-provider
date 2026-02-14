@@ -1,30 +1,30 @@
-package service
+package cache
 
 import (
 	"log/slog"
 	"sync"
 	"time"
 
-	"audiobookshelf-asmr-provider/internal/domain"
+	"audiobookshelf-asmr-provider/internal/service"
 )
 
 // cacheEntry holds the cached metadata and its expiration time.
 type cacheEntry struct {
-	data   []domain.AbsBookMetadata
+	data   []service.AbsBookMetadata
 	expiry time.Time
 }
 
-// Cache provides thread-safe in-memory caching for metadata results.
-type Cache struct {
+// MemoryCache provides thread-safe in-memory caching for metadata results.
+type MemoryCache struct {
 	entries         map[string]cacheEntry
 	mu              sync.RWMutex
 	maxSize         int
 	cleanupInterval time.Duration
 }
 
-// NewCache creates a new cache and starts a background goroutine to evict expired entries.
-func NewCache() *Cache {
-	c := &Cache{
+// NewMemoryCache creates a new cache and starts a background goroutine to evict expired entries.
+func NewMemoryCache() *MemoryCache {
+	c := &MemoryCache{
 		entries:         make(map[string]cacheEntry),
 		maxSize:         10000,
 		cleanupInterval: 1 * time.Hour,
@@ -34,7 +34,7 @@ func NewCache() *Cache {
 }
 
 // Get retrieves cached data for the given key, if it exists and has not expired.
-func (c *Cache) Get(key string) ([]domain.AbsBookMetadata, bool) {
+func (c *MemoryCache) Get(key string) ([]service.AbsBookMetadata, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -47,7 +47,7 @@ func (c *Cache) Get(key string) ([]domain.AbsBookMetadata, bool) {
 
 // Put stores data in the cache with the given TTL.
 // If the cache exceeds maxSize, one entry is evicted.
-func (c *Cache) Put(key string, data []domain.AbsBookMetadata, ttl time.Duration) {
+func (c *MemoryCache) Put(key string, data []service.AbsBookMetadata, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -67,7 +67,7 @@ func (c *Cache) Put(key string, data []domain.AbsBookMetadata, ttl time.Duration
 }
 
 // EvictExpired removes all expired entries from the cache.
-func (c *Cache) EvictExpired() {
+func (c *MemoryCache) EvictExpired() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -85,14 +85,14 @@ func (c *Cache) EvictExpired() {
 }
 
 // Len returns the number of entries in the cache.
-func (c *Cache) Len() int {
+func (c *MemoryCache) Len() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return len(c.entries)
 }
 
 // startCleanup periodically removes expired entries.
-func (c *Cache) startCleanup() {
+func (c *MemoryCache) startCleanup() {
 	ticker := time.NewTicker(c.cleanupInterval)
 	defer ticker.Stop()
 	for range ticker.C {

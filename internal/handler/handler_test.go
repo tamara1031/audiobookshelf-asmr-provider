@@ -1,4 +1,4 @@
-package http
+package handler
 
 import (
 	"context"
@@ -9,29 +9,34 @@ import (
 	"testing"
 	"time"
 
-	"audiobookshelf-asmr-provider/internal/domain"
 	"audiobookshelf-asmr-provider/internal/service"
 )
 
-// mockProvider implements domain.Provider for testing.
+// mockCache implements service.Cache for testing.
+type mockCache struct{}
+
+func (m *mockCache) Get(_ string) ([]service.AbsBookMetadata, bool)             { return nil, false }
+func (m *mockCache) Put(_ string, _ []service.AbsBookMetadata, _ time.Duration) {}
+
+// mockProvider implements service.Provider for testing.
 type mockProvider struct {
 	id      string
-	results []domain.AbsBookMetadata
+	results []service.AbsBookMetadata
 	err     error
 }
 
 func (m *mockProvider) ID() string              { return m.id }
 func (m *mockProvider) CacheTTL() time.Duration { return 1 * time.Hour }
-func (m *mockProvider) Search(_ context.Context, _ string) ([]domain.AbsBookMetadata, error) {
+func (m *mockProvider) Search(_ context.Context, _ string) ([]service.AbsBookMetadata, error) {
 	return m.results, m.err
 }
 
 func TestSearch_WithQueryParam(t *testing.T) {
 	mock := &mockProvider{
 		id:      "test",
-		results: []domain.AbsBookMetadata{{Title: "Result", ISBN: "RJ123456"}},
+		results: []service.AbsBookMetadata{{Title: "Result", ISBN: "RJ123456"}},
 	}
-	svc := service.NewService(mock)
+	svc := service.NewService(&mockCache{}, mock)
 	h := NewHandler(svc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/search?q=RJ123456", nil)
@@ -43,7 +48,7 @@ func TestSearch_WithQueryParam(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 
-	var resp domain.AbsMetadataResponse
+	var resp service.AbsMetadataResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
@@ -55,9 +60,9 @@ func TestSearch_WithQueryParam(t *testing.T) {
 func TestSearch_WithQueryFallbackParam(t *testing.T) {
 	mock := &mockProvider{
 		id:      "test",
-		results: []domain.AbsBookMetadata{{Title: "Fallback"}},
+		results: []service.AbsBookMetadata{{Title: "Fallback"}},
 	}
-	svc := service.NewService(mock)
+	svc := service.NewService(&mockCache{}, mock)
 	h := NewHandler(svc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/search?query=test", nil)
@@ -71,7 +76,7 @@ func TestSearch_WithQueryFallbackParam(t *testing.T) {
 }
 
 func TestSearch_MissingQuery(t *testing.T) {
-	svc := service.NewService()
+	svc := service.NewService(&mockCache{})
 	h := NewHandler(svc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/search", nil)
@@ -89,7 +94,7 @@ func TestSearch_ProviderError(t *testing.T) {
 		id:  "test",
 		err: errors.New("provider failure"),
 	}
-	svc := service.NewService(mock)
+	svc := service.NewService(&mockCache{}, mock)
 	h := NewHandler(svc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/search?q=test", nil)
@@ -106,9 +111,9 @@ func TestSearch_ProviderError(t *testing.T) {
 func TestSearchSingle_ValidQuery(t *testing.T) {
 	mock := &mockProvider{
 		id:      "dlsite",
-		results: []domain.AbsBookMetadata{{Title: "DLsite Result"}},
+		results: []service.AbsBookMetadata{{Title: "DLsite Result"}},
 	}
-	svc := service.NewService(mock)
+	svc := service.NewService(&mockCache{}, mock)
 	h := NewHandler(svc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/dlsite/search?q=RJ123456", nil)
@@ -120,7 +125,7 @@ func TestSearchSingle_ValidQuery(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 
-	var resp domain.AbsMetadataResponse
+	var resp service.AbsMetadataResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
@@ -130,7 +135,7 @@ func TestSearchSingle_ValidQuery(t *testing.T) {
 }
 
 func TestSearchSingle_MissingQuery(t *testing.T) {
-	svc := service.NewService()
+	svc := service.NewService(&mockCache{})
 	h := NewHandler(svc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/dlsite/search", nil)
@@ -144,7 +149,7 @@ func TestSearchSingle_MissingQuery(t *testing.T) {
 }
 
 func TestSearchSingle_UnknownProvider(t *testing.T) {
-	svc := service.NewService()
+	svc := service.NewService(&mockCache{})
 	h := NewHandler(svc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/unknown/search?q=test", nil)

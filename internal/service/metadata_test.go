@@ -5,28 +5,45 @@ import (
 	"errors"
 	"testing"
 	"time"
-
-	"audiobookshelf-asmr-provider/internal/domain"
 )
 
-// MockProvider implements domain.Provider for testing.
+// MockProvider implements Provider for testing.
 type MockProvider struct {
 	IDVal         string
-	SearchResults []domain.AbsBookMetadata
+	SearchResults []AbsBookMetadata
 	SearchErr     error
 	MockCacheTTL  time.Duration
 }
 
 func (m *MockProvider) ID() string { return m.IDVal }
 
-func (m *MockProvider) Search(_ context.Context, _ string) ([]domain.AbsBookMetadata, error) {
+func (m *MockProvider) Search(_ context.Context, _ string) ([]AbsBookMetadata, error) {
 	return m.SearchResults, m.SearchErr
 }
 
 func (m *MockProvider) CacheTTL() time.Duration { return m.MockCacheTTL }
 
+// MockCache implements Cache for testing.
+type MockCache struct {
+	GetFunc func(key string) ([]AbsBookMetadata, bool)
+	PutFunc func(key string, data []AbsBookMetadata, ttl time.Duration)
+}
+
+func (m *MockCache) Get(key string) ([]AbsBookMetadata, bool) {
+	if m.GetFunc != nil {
+		return m.GetFunc(key)
+	}
+	return nil, false
+}
+
+func (m *MockCache) Put(key string, data []AbsBookMetadata, ttl time.Duration) {
+	if m.PutFunc != nil {
+		m.PutFunc(key, data, ttl)
+	}
+}
+
 func TestService_Search(t *testing.T) {
-	mockData := []domain.AbsBookMetadata{
+	mockData := []AbsBookMetadata{
 		{Title: "Test Book", ISBN: "RJ123456"},
 	}
 	mockProvider := &MockProvider{
@@ -35,7 +52,19 @@ func TestService_Search(t *testing.T) {
 		MockCacheTTL:  1 * time.Hour,
 	}
 
-	svc := NewService(mockProvider)
+	// Simple map-based mock for this test
+	store := make(map[string][]AbsBookMetadata)
+	cache := &MockCache{
+		GetFunc: func(key string) ([]AbsBookMetadata, bool) {
+			d, ok := store[key]
+			return d, ok
+		},
+		PutFunc: func(key string, data []AbsBookMetadata, _ time.Duration) {
+			store[key] = data
+		},
+	}
+
+	svc := NewService(cache, mockProvider)
 
 	// 1. Initial Search (should call provider)
 	resp, err := svc.Search(context.Background(), "RJ123456")
@@ -63,9 +92,10 @@ func TestService_Search(t *testing.T) {
 func TestService_SearchByProviderID(t *testing.T) {
 	mockProvider := &MockProvider{
 		IDVal:         "provider_a",
-		SearchResults: []domain.AbsBookMetadata{{Title: "A"}},
+		SearchResults: []AbsBookMetadata{{Title: "A"}},
 	}
-	svc := NewService(mockProvider)
+	cache := &MockCache{}
+	svc := NewService(cache, mockProvider)
 
 	// Valid Provider
 	resp, err := svc.SearchByProviderID(context.Background(), "provider_a", "query")
@@ -93,7 +123,8 @@ func TestService_SearchByProviderID(t *testing.T) {
 func TestService_Providers(t *testing.T) {
 	p1 := &MockProvider{IDVal: "a"}
 	p2 := &MockProvider{IDVal: "b"}
-	svc := NewService(p1, p2)
+	cache := &MockCache{}
+	svc := NewService(cache, p1, p2)
 
 	providers := svc.Providers()
 	if len(providers) != 2 {
@@ -111,10 +142,11 @@ func TestService_Search_ProviderErrorContinues(t *testing.T) {
 	}
 	working := &MockProvider{
 		IDVal:         "ok",
-		SearchResults: []domain.AbsBookMetadata{{Title: "OK"}},
+		SearchResults: []AbsBookMetadata{{Title: "OK"}},
 		MockCacheTTL:  1 * time.Hour,
 	}
-	svc := NewService(failing, working)
+	cache := &MockCache{}
+	svc := NewService(cache, failing, working)
 
 	resp, err := svc.Search(context.Background(), "test")
 	if err != nil {
@@ -128,10 +160,20 @@ func TestService_Search_ProviderErrorContinues(t *testing.T) {
 func TestService_SearchProviderWithCache_ZeroTTL(t *testing.T) {
 	mock := &MockProvider{
 		IDVal:         "zero_ttl",
-		SearchResults: []domain.AbsBookMetadata{{Title: "Cached"}},
+		SearchResults: []AbsBookMetadata{{Title: "Cached"}},
 		MockCacheTTL:  0, // zero TTL
 	}
-	svc := NewService(mock)
+	store := make(map[string][]AbsBookMetadata)
+	cache := &MockCache{
+		GetFunc: func(key string) ([]AbsBookMetadata, bool) {
+			d, ok := store[key]
+			return d, ok
+		},
+		PutFunc: func(key string, data []AbsBookMetadata, _ time.Duration) {
+			store[key] = data
+		},
+	}
+	svc := NewService(cache, mock)
 
 	// First call populates cache
 	_, err := svc.Search(context.Background(), "q")

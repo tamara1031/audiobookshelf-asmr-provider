@@ -9,9 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	httphandler "audiobookshelf-asmr-provider/internal/adapter/http"
-	"audiobookshelf-asmr-provider/internal/adapter/provider"
 	"audiobookshelf-asmr-provider/internal/config"
+	"audiobookshelf-asmr-provider/internal/domain/cache"
+	"audiobookshelf-asmr-provider/internal/domain/provider"
+	"audiobookshelf-asmr-provider/internal/handler"
 	"audiobookshelf-asmr-provider/internal/service"
 )
 
@@ -25,17 +26,18 @@ func main() {
 	providers := provider.NewAll()
 	slog.Info("Loaded providers", "count", len(providers))
 
-	svc := service.NewService(providers...)
-	handler := httphandler.NewHandler(svc)
+	memCache := cache.NewMemoryCache()
+	svc := service.NewService(memCache, providers...)
+	h := handler.NewHandler(svc)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/search", handler.Search)
+	mux.HandleFunc("/api/search", h.Search)
 
 	for _, p := range svc.Providers() {
 		providerID := p.ID()
 		path := "/api/" + providerID + "/search"
 		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
-			handler.SearchSingle(w, r, providerID)
+			h.SearchSingle(w, r, providerID)
 		})
 		slog.Debug("Registered provider endpoint", "path", path)
 	}
