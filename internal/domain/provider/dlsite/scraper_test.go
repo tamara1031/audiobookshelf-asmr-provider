@@ -267,3 +267,83 @@ func TestDLsiteFetcher_Search_KeywordWithSpaces(t *testing.T) {
 		t.Fatalf("Search failed: %v", err)
 	}
 }
+
+func TestDLsiteFetcher_Search_AuthorNarratorSplit(t *testing.T) {
+	mockHTML := `
+	<html><body>
+		<table id="search_result_list">
+			<tr>
+				<td class="work_name"><a href="https://www.dlsite.com/maniax/work/=/product_id/RJ123456.html">Split Test</a></td>
+				<td class="maker_name">
+					<a href="#">Circle Name</a>
+					 / 
+					<a href="#">CV Name</a>
+				</td>
+			</tr>
+		</table>
+	</body></html>`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(mockHTML))
+	}))
+	defer server.Close()
+
+	f := newTestFetcher(server.URL)
+
+	results, err := f.Search(context.Background(), "split test")
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("Expected 1 result, got %d", len(results))
+	}
+
+	res := results[0]
+	if res.Author != "Circle Name" {
+		t.Errorf("Expected Author 'Circle Name', got '%s'", res.Author)
+	}
+	if res.Narrator != "CV Name" {
+		t.Errorf("Expected Narrator 'CV Name', got '%s'", res.Narrator)
+	}
+}
+
+func TestDLsiteFetcher_Search_AuthorNarratorSplit_Grid(t *testing.T) {
+	mockHTML := `
+	<html><body>
+		<ul class="n_worklist">
+			<li>
+				<div class="work_name"><a href="https://www.dlsite.com/maniax/work/=/product_id/RJ123456.html">Split Test Grid</a></div>
+				<div class="maker_name">
+					<a href="#">Circle Grid</a>
+					 / 
+					<a href="#">CV Grid</a>
+				</div>
+			</li>
+		</ul>
+	</body></html>`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(mockHTML))
+	}))
+	defer server.Close()
+
+	f := newTestFetcher(server.URL)
+
+	results, err := f.Search(context.Background(), "split test grid")
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("Expected 1 result, got %d", len(results))
+	}
+
+	res := results[0]
+	if res.Author != "Circle Grid" {
+		t.Errorf("Expected Author 'Circle Grid', got '%s'", res.Author)
+	}
+	if res.Narrator != "CV Grid" {
+		t.Errorf("Expected Narrator 'CV Grid', got '%s'", res.Narrator)
+	}
+}

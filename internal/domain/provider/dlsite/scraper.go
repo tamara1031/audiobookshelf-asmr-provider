@@ -67,7 +67,17 @@ func (f *dlsiteFetcher) searchKeywords(ctx context.Context, query string) ([]ser
 	doc.Find("#search_result_list tr").Each(func(i int, s *goquery.Selection) {
 		title := strings.TrimSpace(s.Find(".work_name a").Text())
 		link, _ := s.Find(".work_name a").Attr("href")
-		maker := strings.TrimSpace(s.Find(".maker_name a").Text())
+		// Extract maker and potentially narrator if separated by slash
+		makerText := strings.TrimSpace(s.Find(".maker_name").Text())
+		var maker, narrator string
+
+		if strings.Contains(makerText, "/") {
+			parts := strings.SplitN(makerText, "/", 2)
+			maker = strings.TrimSpace(parts[0])
+			narrator = strings.TrimSpace(parts[1])
+		} else {
+			maker = makerText
+		}
 
 		if title == "" {
 			return
@@ -88,6 +98,7 @@ func (f *dlsiteFetcher) searchKeywords(ctx context.Context, query string) ([]ser
 			results = append(results, service.AbsBookMetadata{
 				Title:     title,
 				Author:    maker,
+				Narrator:  narrator,
 				ISBN:      rjCode,
 				Publisher: "DLsite",
 				Explicit:  true,
@@ -102,7 +113,17 @@ func (f *dlsiteFetcher) searchKeywords(ctx context.Context, query string) ([]ser
 
 			title := strings.TrimSpace(s.Find(".work_name a").Text())
 			link, _ := s.Find(".work_name a").Attr("href")
-			maker := strings.TrimSpace(s.Find(".maker_name a").Text())
+			// Extract maker and potentially narrator if separated by slash
+			makerText := strings.TrimSpace(s.Find(".maker_name").Text())
+			var maker, narrator string
+
+			if strings.Contains(makerText, "/") {
+				parts := strings.SplitN(makerText, "/", 2)
+				maker = strings.TrimSpace(parts[0])
+				narrator = strings.TrimSpace(parts[1])
+			} else {
+				maker = makerText
+			}
 
 			// Extract RJ code from link
 			var rjCode string
@@ -127,6 +148,7 @@ func (f *dlsiteFetcher) searchKeywords(ctx context.Context, query string) ([]ser
 				results = append(results, service.AbsBookMetadata{
 					Title:     title,
 					Author:    maker,
+					Narrator:  narrator,
 					ISBN:      rjCode,
 					Publisher: "DLsite",
 					Explicit:  true,
