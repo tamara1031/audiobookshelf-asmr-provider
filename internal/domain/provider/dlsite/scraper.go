@@ -279,15 +279,21 @@ func (f *dlsiteFetcher) extractCircle(doc *goquery.Document) string {
 }
 
 func (f *dlsiteFetcher) extractCoverURL(doc *goquery.Document) string {
-	imgNode := doc.Find(".product_slider_data div").First()
-	imgSrc, exists := imgNode.Attr("data-src")
-	if !exists {
-		imgSrc, _ = imgNode.Attr("src")
+	// <meta property="og:image" content="..."> を探します
+	selection := doc.Find("meta[property='og:image']")
+
+	// content属性の値（URL）を取得
+	content, exists := selection.Attr("content")
+
+	if exists && content != "" {
+		// 万が一 "//" から始まるURLだった場合の補完処理
+		if strings.HasPrefix(content, "//") {
+			return "https:" + content
+		}
+		return content
 	}
-	if imgSrc != "" && strings.HasPrefix(imgSrc, "//") {
-		return "https:" + imgSrc
-	}
-	return imgSrc
+
+	return ""
 }
 
 func (f *dlsiteFetcher) extractTableData(doc *goquery.Document, work *AsmrWork) {
