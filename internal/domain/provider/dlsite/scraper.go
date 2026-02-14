@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -52,7 +53,7 @@ func (f *dlsiteFetcher) Search(ctx context.Context, query string) ([]service.Abs
 }
 
 func (f *dlsiteFetcher) searchKeywords(ctx context.Context, query string) ([]service.AbsBookMetadata, error) {
-	searchURL := fmt.Sprintf("%s/maniax/fs/=/keyword/%s", f.baseURL, query)
+	searchURL := fmt.Sprintf("%s/maniax/fs/=/keyword/%s", f.baseURL, url.PathEscape(query))
 
 	doc, err := f.fetchPage(ctx, searchURL)
 	if err != nil {
@@ -167,6 +168,7 @@ func (f *dlsiteFetcher) fetchPage(ctx context.Context, url string) (*goquery.Doc
 		return nil, err
 	}
 	req.AddCookie(&http.Cookie{Name: "adult_checked", Value: "1"})
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
 
 	resp, err := f.client.Do(req)
 	if err != nil {
