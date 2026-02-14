@@ -64,19 +64,45 @@ func (f *dlsiteFetcher) searchKeywords(ctx context.Context, query string) ([]ser
 	extractor := regexp.MustCompile(`(?i)RJ\d{6,8}`)
 
 	// Try table format first (classic)
-	doc.Find("#search_result_list tr").Each(func(i int, s *goquery.Selection) {
+	doc.Find("#search_result_list tr").EachWithBreak(func(i int, s *goquery.Selection) bool {
+		if len(results) >= 5 {
+			return false
+		}
 		if meta, ok := f.extractFromTable(s, extractor); ok {
 			results = append(results, meta)
 		}
+		return true
 	})
 
 	// If no results from table, try grid format (n_worklist)
 	if len(results) == 0 {
-		doc.Find(".n_worklist li").Each(func(i int, s *goquery.Selection) {
+		doc.Find(".n_worklist li").EachWithBreak(func(i int, s *goquery.Selection) bool {
+			if len(results) >= 5 {
+				return false
+			}
 			if meta, ok := f.extractFromGrid(s, extractor); ok {
 				results = append(results, meta)
 			}
+			return true
 		})
+	}
+
+	// Enhance results with full metadata
+	for i, res := range results {
+		if res.ISBN == "" {
+			continue
+		}
+		rjCode, err := NewRJCode(res.ISBN)
+		if err != nil {
+			continue
+		}
+
+		// Fetch full details
+		work, err := f.getWorkByID(ctx, rjCode)
+		if err == nil {
+			results[i] = f.toAbsMetadata(work)
+		}
+		// If error, keep the partial result from search page
 	}
 
 	return results, nil

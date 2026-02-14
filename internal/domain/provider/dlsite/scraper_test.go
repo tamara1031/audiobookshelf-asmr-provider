@@ -206,14 +206,20 @@ func TestDLsiteFetcher_Search_Keyword(t *testing.T) {
 	</body></html>`
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(r.URL.Path, "/fsr/") {
-			t.Errorf("Expected fsr search path, got %s", r.URL.Path)
+		if strings.Contains(r.URL.Path, "/fsr/") && strings.Contains(r.URL.Path, "/keyword/") {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(mockHTML))
+			return
 		}
-		if !strings.Contains(r.URL.Path, "/keyword/") {
-			t.Errorf("Expected keyword search path, got %s", r.URL.Path)
+		// Allow product page requests (return 404 to fallback to partial metadata)
+		if strings.Contains(r.URL.Path, "/product_id/") {
+			w.WriteHeader(http.StatusNotFound)
+			return
 		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(mockHTML))
+
+		// Fail other unexpected requests
+		t.Errorf("Unexpected request path: %s", r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer server.Close()
 
@@ -287,8 +293,12 @@ func TestDLsiteFetcher_Search_AuthorNarratorSplit(t *testing.T) {
 	</body></html>`
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(mockHTML))
+		if strings.Contains(r.URL.Path, "fsr") || strings.Contains(r.URL.Path, "keyword") {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(mockHTML))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer server.Close()
 
@@ -333,8 +343,12 @@ func TestDLsiteFetcher_Search_AuthorNarratorSplit_Grid(t *testing.T) {
 	</body></html>`
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(mockHTML))
+		if strings.Contains(r.URL.Path, "fsr") || strings.Contains(r.URL.Path, "keyword") {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(mockHTML))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer server.Close()
 
@@ -357,5 +371,75 @@ func TestDLsiteFetcher_Search_AuthorNarratorSplit_Grid(t *testing.T) {
 	}
 	if res.Cover != "https://example.com/grid_thumb.jpg" {
 		t.Errorf("Expected Cover 'https://example.com/grid_thumb.jpg', got '%s'", res.Cover)
+	}
+}
+func TestDLsiteFetcher_Search_Keyword_FullMetadata(t *testing.T) {
+	searchHTML := `
+	<html><body>
+		<table id="search_result_list">
+			<tr>
+				<td class="work_name"><a href="https://www.dlsite.com/maniax/work/=/product_id/RJ999999.html">Partial Title</a></td>
+				<td class="maker_name"><a href="#">Partial Maker</a></td>
+			</tr>
+		</table>
+	</body></html>`
+
+	workHTML := `
+	<html>
+        <body>
+            <h1 id="work_name">Full Title</h1>
+            <span class="maker_name"><a href="#">Full Circle</a></span>
+            <div class="product_slider_data">
+                <div data-src="//example.com/full_cover.jpg"></div>
+            </div>
+            <table id="work_outline">
+                <tr><th>販売日</th><td><a href="#">2023年12月31日</a></td></tr>
+                <tr><th>ジャンル</th><td><a href="#">Full Tag</a></td></tr>
+                <tr><th>声優</th><td><a href="#">Full Actor</a></td></tr>
+            </table>
+			<div class="main_header">
+				<p>Full Description</p>
+			</div>
+        </body>
+    </html>`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/fsr/") {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(searchHTML))
+			return
+		}
+		if strings.Contains(r.URL.Path, "/product_id/RJ999999.html") {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(workHTML))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	f := newTestFetcher(server.URL)
+
+	results, err := f.Search(context.Background(), "keyword")
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("Expected 1 result, got %d", len(results))
+	}
+
+	res := results[0]
+	// Verify we got the FULL metadata, not the partial one
+	if res.Title != "Full Title" {
+		t.Errorf("Expected full title 'Full Title', got '%s'", res.Title)
+	}
+	if res.Author != "Full Circle" {
+		t.Errorf("Expected full author 'Full Circle', got '%s'", res.Author)
+	}
+	if res.Narrator != "Full Actor" {
+		t.Errorf("Expected full narrator 'Full Actor', got '%s'", res.Narrator)
+	}
+	if res.Cover != "https://example.com/full_cover.jpg" {
+		t.Errorf("Expected full cover 'https://example.com/full_cover.jpg', got '%s'", res.Cover)
 	}
 }
