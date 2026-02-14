@@ -206,6 +206,9 @@ func TestDLsiteFetcher_Search_Keyword(t *testing.T) {
 	</body></html>`
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/fsr/") {
+			t.Errorf("Expected fsr search path, got %s", r.URL.Path)
+		}
 		if !strings.Contains(r.URL.Path, "/keyword/") {
 			t.Errorf("Expected keyword search path, got %s", r.URL.Path)
 		}
@@ -229,5 +232,38 @@ func TestDLsiteFetcher_Search_Keyword(t *testing.T) {
 	}
 	if results[0].ISBN != "RJ999999" {
 		t.Errorf("Expected ISBN 'RJ999999', got '%s'", results[0].ISBN)
+	}
+}
+
+func TestDLsiteFetcher_Search_KeywordWithSpaces(t *testing.T) {
+	mockHTML := `<html><body><table id="search_result_list"></table></body></html>`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check that spaces are encoded as '+' (which is what QueryEscape does)
+		// Go's http server might decode the path before we see it in r.URL.Path?
+		// r.URL.Path usually has decoded path. r.URL.RawPath has encoded.
+		// However, QueryEscape puts '+' in the path. standard path escaping uses %20.
+		// If we use QueryEscape for path segment, it might be interpreted literally.
+
+		// Let's check the RawPath or RequestURI to be sure how it was sent.
+		if !strings.Contains(r.RequestURI, "foo+bar") {
+			t.Errorf("Expected URL to contain 'foo+bar', got %s", r.RequestURI)
+		}
+		if strings.Contains(r.RequestURI, "foo%20bar") {
+			t.Errorf("URL should not contain 'foo%%20bar'")
+		}
+		if !strings.Contains(r.RequestURI, "/fsr/") {
+			t.Errorf("Expected fsr search path, got %s", r.RequestURI)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(mockHTML))
+	}))
+	defer server.Close()
+
+	f := newTestFetcher(server.URL)
+
+	_, err := f.Search(context.Background(), "foo bar")
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
 	}
 }
