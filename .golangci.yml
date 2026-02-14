@@ -1,0 +1,26 @@
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - govet
+    - staticcheck
+    - gosimple
+    - ineffassign
+    - typecheck
+    - unused
+    - gocyclo
+    - errcheck
+    - revive
+    - gofmt
+    - goimports
+    - misspell
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15
+  revive:
+    severity: warning
+  goimports:
+    local-prefixes: audiobookshelf-asmr-provider
