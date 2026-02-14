@@ -65,153 +65,140 @@ func (f *dlsiteFetcher) searchKeywords(ctx context.Context, query string) ([]ser
 
 	// Try table format first (classic)
 	doc.Find("#search_result_list tr").Each(func(i int, s *goquery.Selection) {
-		title := strings.TrimSpace(s.Find(".work_name a").Text())
-		link, _ := s.Find(".work_name a").Attr("href")
-		// Extract maker and narrator using classes
-		makerElem := s.Find(".maker_name")
-		// The circle is usually the first link, direct child or just before separation
-		// Ideally we select direct child, but goquery's Find parses descendants.
-		// We can filter out the narrator link if we find it separately.
-
-		var maker, narrator string
-
-		// Attempt to identify narrator explicitly
-		narratorElem := makerElem.Find(".author a")
-		if narratorElem.Length() > 0 {
-			narrator = strings.TrimSpace(narratorElem.Text())
-		}
-
-		// For maker, we might get everything if we just do Text().
-		// If we use .maker_name > a, we get the circle.
-		// However, goquery's selector support might be limited.
-		// Let's try to find the first anchor, check if it matches narrator, if not it's circle.
-		makerElem.Find("a").Each(func(i int, sel *goquery.Selection) {
-			text := strings.TrimSpace(sel.Text())
-			// If this text is the narrator, skip (unless circle and narrator same? unlikely)
-			if text == narrator {
-				return
-			}
-			// First non-narrator link is likely the circle
-			if maker == "" {
-				maker = text
-			}
-		})
-
-		if title == "" {
-			return
-		}
-
-		// Extract RJ code from link
-		var rjCode string
-		if found := extractor.FindString(link); found != "" {
-			rjCode = found
-		} else {
-			// Fallback
-			if strings.Contains(link, "RJ") {
-				rjCode = extractor.FindString(link)
-			}
-		}
-
-		// Extract thumbnail
-		var coverURL string
-		img := s.Find(".search_result_img_box_inner img")
-		if src, exists := img.Attr("src"); exists {
-			coverURL = src
-		}
-		if dataSrc, exists := img.Attr("data-src"); exists && dataSrc != "" {
-			coverURL = dataSrc
-		}
-		if coverURL != "" && strings.HasPrefix(coverURL, "//") {
-			coverURL = "https:" + coverURL
-		}
-
-		if title != "" && rjCode != "" {
-			results = append(results, service.AbsBookMetadata{
-				Title:     title,
-				Author:    maker,
-				Narrator:  narrator,
-				ISBN:      rjCode,
-				Publisher: "DLsite",
-				Explicit:  true,
-				Language:  "Japanese",
-				Cover:     coverURL,
-			})
+		if meta, ok := f.extractFromTable(s, extractor); ok {
+			results = append(results, meta)
 		}
 	})
 
 	// If no results from table, try grid format (n_worklist)
 	if len(results) == 0 {
 		doc.Find(".n_worklist li").Each(func(i int, s *goquery.Selection) {
-
-			title := strings.TrimSpace(s.Find(".work_name a").Text())
-			link, _ := s.Find(".work_name a").Attr("href")
-			// Extract maker and narrator using classes
-			makerElem := s.Find(".maker_name")
-			var maker, narrator string
-
-			narratorElem := makerElem.Find(".author a")
-			if narratorElem.Length() > 0 {
-				narrator = strings.TrimSpace(narratorElem.Text())
-			}
-
-			makerElem.Find("a").Each(func(i int, sel *goquery.Selection) {
-				text := strings.TrimSpace(sel.Text())
-				if text == narrator {
-					return
-				}
-				if maker == "" {
-					maker = text
-				}
-			})
-
-			// Extract RJ code from link
-			var rjCode string
-			if found := extractor.FindString(link); found != "" {
-				rjCode = found
-			} else {
-				// Try to extract from the end of URL if regex didn't match directly
-				parts := strings.Split(link, "/")
-				for _, p := range parts {
-					if strings.HasPrefix(strings.ToUpper(p), "RJ") {
-						if strings.HasSuffix(p, ".html") {
-							rjCode = strings.TrimSuffix(p, ".html")
-						} else {
-							rjCode = p
-						}
-						break
-					}
-				}
-			}
-
-			// Extract thumbnail
-			var coverURL string
-			img := s.Find(".work_thumb_inner img")
-			if src, exists := img.Attr("src"); exists {
-				coverURL = src
-			}
-			if dataSrc, exists := img.Attr("data-src"); exists && dataSrc != "" {
-				coverURL = dataSrc
-			}
-			if coverURL != "" && strings.HasPrefix(coverURL, "//") {
-				coverURL = "https:" + coverURL
-			}
-
-			if title != "" && rjCode != "" {
-				results = append(results, service.AbsBookMetadata{
-					Title:     title,
-					Author:    maker,
-					Narrator:  narrator,
-					ISBN:      rjCode,
-					Publisher: "DLsite",
-					Explicit:  true,
-					Language:  "Japanese",
-					Cover:     coverURL,
-				})
+			if meta, ok := f.extractFromGrid(s, extractor); ok {
+				results = append(results, meta)
 			}
 		})
 	}
 
 	return results, nil
+}
+
+func (f *dlsiteFetcher) extractFromTable(s *goquery.Selection, extractor *regexp.Regexp) (service.AbsBookMetadata, bool) {
+	title := strings.TrimSpace(s.Find(".work_name a").Text())
+	if title == "" {
+		return service.AbsBookMetadata{}, false
+	}
+	link, _ := s.Find(".work_name a").Attr("href")
+
+	maker, narrator := f.extractMakerAndNarrator(s)
+
+	var rjCode string
+	if found := extractor.FindString(link); found != "" {
+		rjCode = found
+	} else if strings.Contains(link, "RJ") {
+		rjCode = extractor.FindString(link)
+	}
+
+	if rjCode == "" {
+		return service.AbsBookMetadata{}, false
+	}
+
+	var coverURL string
+	img := s.Find(".search_result_img_box_inner img")
+	if src, exists := img.Attr("src"); exists {
+		coverURL = src
+	}
+	if dataSrc, exists := img.Attr("data-src"); exists && dataSrc != "" {
+		coverURL = dataSrc
+	}
+	if coverURL != "" && strings.HasPrefix(coverURL, "//") {
+		coverURL = "https:" + coverURL
+	}
+
+	return service.AbsBookMetadata{
+		Title:     title,
+		Author:    maker,
+		Narrator:  narrator,
+		ISBN:      rjCode,
+		Publisher: "DLsite",
+		Explicit:  true,
+		Language:  "Japanese",
+		Cover:     coverURL,
+	}, true
+}
+
+func (f *dlsiteFetcher) extractFromGrid(s *goquery.Selection, extractor *regexp.Regexp) (service.AbsBookMetadata, bool) {
+	title := strings.TrimSpace(s.Find(".work_name a").Text())
+	if title == "" {
+		return service.AbsBookMetadata{}, false
+	}
+	link, _ := s.Find(".work_name a").Attr("href")
+
+	maker, narrator := f.extractMakerAndNarrator(s)
+
+	var rjCode string
+	if found := extractor.FindString(link); found != "" {
+		rjCode = found
+	} else {
+		parts := strings.Split(link, "/")
+		for _, p := range parts {
+			if strings.HasPrefix(strings.ToUpper(p), "RJ") {
+				if strings.HasSuffix(p, ".html") {
+					rjCode = strings.TrimSuffix(p, ".html")
+				} else {
+					rjCode = p
+				}
+				break
+			}
+		}
+	}
+
+	if rjCode == "" {
+		return service.AbsBookMetadata{}, false
+	}
+
+	var coverURL string
+	img := s.Find(".work_thumb_inner img")
+	if src, exists := img.Attr("src"); exists {
+		coverURL = src
+	}
+	if dataSrc, exists := img.Attr("data-src"); exists && dataSrc != "" {
+		coverURL = dataSrc
+	}
+	if coverURL != "" && strings.HasPrefix(coverURL, "//") {
+		coverURL = "https:" + coverURL
+	}
+
+	return service.AbsBookMetadata{
+		Title:     title,
+		Author:    maker,
+		Narrator:  narrator,
+		ISBN:      rjCode,
+		Publisher: "DLsite",
+		Explicit:  true,
+		Language:  "Japanese",
+		Cover:     coverURL,
+	}, true
+}
+
+func (f *dlsiteFetcher) extractMakerAndNarrator(s *goquery.Selection) (string, string) {
+	makerElem := s.Find(".maker_name")
+	var maker, narrator string
+
+	narratorElem := makerElem.Find(".author a")
+	if narratorElem.Length() > 0 {
+		narrator = strings.TrimSpace(narratorElem.Text())
+	}
+
+	makerElem.Find("a").Each(func(i int, sel *goquery.Selection) {
+		text := strings.TrimSpace(sel.Text())
+		if text == narrator {
+			return
+		}
+		if maker == "" {
+			maker = text
+		}
+	})
+	return maker, narrator
 }
 
 // getWorkByID fetches and parses the work page for a given RJ code.
