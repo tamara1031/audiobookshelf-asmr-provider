@@ -49,7 +49,11 @@ The application is configured via environment variables:
 | :--- | :--- | :--- |
 | `PORT` | The port the server listens on. | `8080` |
 | `LOG_LEVEL` | Logging verbosity (`DEBUG`, `INFO`, `WARN`, `ERROR`). | `INFO` |
-| `DISABLE_AGE_CHECK` | Disable age verification (required for R18 content). Set to `1`, `true`, or `yes` to disable. | `false` |
+| `DISABLE_AGE_CHECK` | Disable age verification (required for R15/R18 content). Set to `1`, `true`, or `yes` to disable. | `false` |
+
+> [!IMPORTANT]
+> **NSFW (R15/R18) コンテンツの取得について**
+> DLsiteなどのプロバイダーから成人向けコンテンツのメタデータを取得するには、`DISABLE_AGE_CHECK` を `true` (または `1`, `yes`) に設定する必要があります。未設定の場合、年齢確認ページでブロックされ、メタデータが取得できない場合があります。
 
 ## Usage
 
