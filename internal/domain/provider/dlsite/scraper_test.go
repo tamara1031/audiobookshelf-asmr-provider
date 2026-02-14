@@ -276,8 +276,8 @@ func TestDLsiteFetcher_Search_AuthorNarratorSplit(t *testing.T) {
 				<td class="work_name"><a href="https://www.dlsite.com/maniax/work/=/product_id/RJ123456.html">Split Test</a></td>
 				<td class="maker_name">
 					<a href="#">Circle Name</a>
-					 / 
-					<a href="#">CV Name</a>
+					<span class="separator">/</span>
+					<span class="author"><a href="#">CV Name</a></span>
 				</td>
 			</tr>
 		</table>
@@ -316,8 +316,8 @@ func TestDLsiteFetcher_Search_AuthorNarratorSplit_Grid(t *testing.T) {
 				<div class="work_name"><a href="https://www.dlsite.com/maniax/work/=/product_id/RJ123456.html">Split Test Grid</a></div>
 				<div class="maker_name">
 					<a href="#">Circle Grid</a>
-					 / 
-					<a href="#">CV Grid</a>
+					<span class="separator">/</span>
+					<span class="author"><a href="#">CV Grid</a></span>
 				</div>
 			</li>
 		</ul>

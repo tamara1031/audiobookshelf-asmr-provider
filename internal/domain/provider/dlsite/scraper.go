@@ -67,17 +67,35 @@ func (f *dlsiteFetcher) searchKeywords(ctx context.Context, query string) ([]ser
 	doc.Find("#search_result_list tr").Each(func(i int, s *goquery.Selection) {
 		title := strings.TrimSpace(s.Find(".work_name a").Text())
 		link, _ := s.Find(".work_name a").Attr("href")
-		// Extract maker and potentially narrator if separated by slash
-		makerText := strings.TrimSpace(s.Find(".maker_name").Text())
+		// Extract maker and narrator using classes
+		makerElem := s.Find(".maker_name")
+		// The circle is usually the first link, direct child or just before separation
+		// Ideally we select direct child, but goquery's Find parses descendants.
+		// We can filter out the narrator link if we find it separately.
+
 		var maker, narrator string
 
-		if strings.Contains(makerText, "/") {
-			parts := strings.SplitN(makerText, "/", 2)
-			maker = strings.TrimSpace(parts[0])
-			narrator = strings.TrimSpace(parts[1])
-		} else {
-			maker = makerText
+		// Attempt to identify narrator explicitly
+		narratorElem := makerElem.Find(".author a")
+		if narratorElem.Length() > 0 {
+			narrator = strings.TrimSpace(narratorElem.Text())
 		}
+
+		// For maker, we might get everything if we just do Text().
+		// If we use .maker_name > a, we get the circle.
+		// However, goquery's selector support might be limited.
+		// Let's try to find the first anchor, check if it matches narrator, if not it's circle.
+		makerElem.Find("a").Each(func(i int, sel *goquery.Selection) {
+			text := strings.TrimSpace(sel.Text())
+			// If this text is the narrator, skip (unless circle and narrator same? unlikely)
+			if text == narrator {
+				return
+			}
+			// First non-narrator link is likely the circle
+			if maker == "" {
+				maker = text
+			}
+		})
 
 		if title == "" {
 			return
@@ -113,17 +131,24 @@ func (f *dlsiteFetcher) searchKeywords(ctx context.Context, query string) ([]ser
 
 			title := strings.TrimSpace(s.Find(".work_name a").Text())
 			link, _ := s.Find(".work_name a").Attr("href")
-			// Extract maker and potentially narrator if separated by slash
-			makerText := strings.TrimSpace(s.Find(".maker_name").Text())
+			// Extract maker and narrator using classes
+			makerElem := s.Find(".maker_name")
 			var maker, narrator string
 
-			if strings.Contains(makerText, "/") {
-				parts := strings.SplitN(makerText, "/", 2)
-				maker = strings.TrimSpace(parts[0])
-				narrator = strings.TrimSpace(parts[1])
-			} else {
-				maker = makerText
+			narratorElem := makerElem.Find(".author a")
+			if narratorElem.Length() > 0 {
+				narrator = strings.TrimSpace(narratorElem.Text())
 			}
+
+			makerElem.Find("a").Each(func(i int, sel *goquery.Selection) {
+				text := strings.TrimSpace(sel.Text())
+				if text == narrator {
+					return
+				}
+				if maker == "" {
+					maker = text
+				}
+			})
 
 			// Extract RJ code from link
 			var rjCode string
