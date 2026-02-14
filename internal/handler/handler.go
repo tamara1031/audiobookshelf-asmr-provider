@@ -18,29 +18,22 @@ func NewHandler(svc *service.Service) *Handler {
 	}
 }
 
-func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query().Get("q")
-	if query == "" {
-		query = r.URL.Query().Get("query")
-	}
-
-	if query == "" {
-		http.Error(w, "query parameter 'q' or 'query' is required", http.StatusBadRequest)
-		return
-	}
-
-	resp, err := h.service.Search(r.Context(), query)
-	if err != nil {
-		slog.Error("Search failed", "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+// SearchAll handles searches across all providers.
+func (h *Handler) SearchAll(w http.ResponseWriter, r *http.Request) {
+	h._Search(w, r, "all")
 }
 
-func (h *Handler) SearchSingle(w http.ResponseWriter, r *http.Request, providerID string) {
+// Search handles searches for a specific provider extracted from path values.
+func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
+	h._Search(w, r, r.PathValue("provider"))
+}
+
+// _Search is a shared helper for executing searches.
+func (h *Handler) _Search(w http.ResponseWriter, r *http.Request, providerID string) {
+	if providerID == "" {
+		providerID = "all"
+	}
+
 	query := r.URL.Query().Get("q")
 	if query == "" {
 		query = r.URL.Query().Get("query")

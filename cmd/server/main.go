@@ -29,18 +29,10 @@ func main() {
 	memCache := cache.NewMemoryCache()
 	svc := service.NewService(memCache, providers...)
 	h := handler.NewHandler(svc)
-
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/search", h.Search)
 
-	for _, p := range svc.Providers() {
-		providerID := p.ID()
-		path := "/api/" + providerID + "/search"
-		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
-			h.SearchSingle(w, r, providerID)
-		})
-		slog.Debug("Registered provider endpoint", "path", path)
-	}
+	mux.HandleFunc("GET /api/search", h.SearchAll)
+	mux.HandleFunc("GET /api/{provider}/search", h.Search)
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -49,7 +41,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,
-		Handler:      mux,
+		Handler:      handler.Logging(mux),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,

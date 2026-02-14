@@ -1,14 +1,18 @@
 package provider
 
 import (
+	"audiobookshelf-asmr-provider/internal/domain/provider/all"
 	"audiobookshelf-asmr-provider/internal/domain/provider/dlsite"
 	"audiobookshelf-asmr-provider/internal/service"
 )
 
 // NewAll instantiates and returns all available providers.
-// Add new providers here when implementing them.
 func NewAll() []service.Provider {
+	dlsiteProvider := dlsite.NewDLsiteFetcher()
+	allProvider := all.NewProvider(dlsiteProvider)
+
 	return []service.Provider{
-		dlsite.NewDLsiteFetcher(),
+		dlsiteProvider,
+		allProvider,
 	}
 }

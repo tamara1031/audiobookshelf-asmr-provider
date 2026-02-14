@@ -4,19 +4,20 @@ import (
 	"testing"
 )
 
-func TestNewAll_ReturnsProviders(t *testing.T) {
+func TestNewAll(t *testing.T) {
 	providers := NewAll()
-
 	if len(providers) == 0 {
-		t.Fatal("NewAll() returned no providers")
+		t.Errorf("expected at least one provider, got 0")
 	}
 
-	for i, p := range providers {
-		if p == nil {
-			t.Errorf("provider at index %d is nil", i)
+	hasDLsite := false
+	for _, p := range providers {
+		if p.ID() == "dlsite" {
+			hasDLsite = true
+			break
 		}
-		if p.ID() == "" {
-			t.Errorf("provider at index %d has empty ID", i)
-		}
+	}
+	if !hasDLsite {
+		t.Errorf("expected dlsite provider to be registered")
 	}
 }

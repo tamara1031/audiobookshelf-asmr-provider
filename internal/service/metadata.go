@@ -4,45 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 )
-
-// AbsMetadataResponse represents the top-level JSON response expected by Audiobookshelf.
-type AbsMetadataResponse struct {
-	Matches []AbsBookMetadata `json:"matches"`
-}
-
-// AbsBookMetadata matches the JSON structure for a book/work in the ABS custom provider API.
-type AbsBookMetadata struct {
-	Title         string   `json:"title"`
-	Subtitle      string   `json:"subtitle,omitempty"`
-	Author        string   `json:"author"`
-	Narrator      string   `json:"narrator,omitempty"`
-	Series        string   `json:"series,omitempty"`
-	Description   string   `json:"description,omitempty"`
-	Publisher     string   `json:"publisher,omitempty"`
-	PublishedYear string   `json:"publishedYear,omitempty"`
-	Genres        []string `json:"genres,omitempty"`
-	Tags          []string `json:"tags,omitempty"`
-	Cover         string   `json:"cover,omitempty"`
-	ISBN          string   `json:"isbn,omitempty"`
-	ASIN          string   `json:"asin,omitempty"`
-	Language      string   `json:"language,omitempty"`
-	Explicit      bool     `json:"explicit,omitempty"`
-}
-
-// Provider defines the interface for a metadata provider plugin.
-type Provider interface {
-	// ID returns the unique identifier of the provider (e.g., "dlsite").
-	ID() string
-
-	// Search searches for works matching the query and returns ABS-compatible metadata.
-	Search(ctx context.Context, query string) ([]AbsBookMetadata, error)
-
-	// CacheTTL returns the duration for which results should be cached.
-	CacheTTL() time.Duration
-}
 
 // Cache defines the interface for a metadata cache.
 type Cache interface {
@@ -69,45 +32,19 @@ func (s *Service) Providers() []Provider {
 	return s.providers
 }
 
-// Search queries all registered providers and returns aggregated results in parallel.
+// Search queries all registered providers by delegating to the "all" provider.
 func (s *Service) Search(ctx context.Context, query string) (*AbsMetadataResponse, error) {
-	var (
-		wg         sync.WaitGroup
-		mu         sync.Mutex
-		allMatches []AbsBookMetadata
-	)
-
-	slog.Info("Starting aggregated search", "query", query, "providers_count", len(s.providers))
-
-	for _, p := range s.providers {
-		wg.Add(1)
-		go func(p Provider) {
-			defer wg.Done()
-			matches, err := s.searchProviderWithCache(ctx, p, query)
-			if err != nil {
-				slog.Error("Provider search failed", "provider", p.ID(), "error", err)
-				return
-			}
-
-			mu.Lock()
-			allMatches = append(allMatches, matches...)
-			mu.Unlock()
-		}(p)
-	}
-
-	wg.Wait()
-
-	return &AbsMetadataResponse{Matches: allMatches}, nil
+	return s.SearchByProviderID(ctx, "all", query)
 }
 
 // SearchByProviderID queries a specific provider by its ID.
 func (s *Service) SearchByProviderID(ctx context.Context, providerID, query string) (*AbsMetadataResponse, error) {
-	provider := s.getProvider(providerID)
-	if provider == nil {
+	p := s.getProvider(providerID)
+	if p == nil {
 		return nil, fmt.Errorf("provider not found: %s", providerID)
 	}
 
-	matches, err := s.searchProviderWithCache(ctx, provider, query)
+	matches, err := s.searchProviderWithCache(ctx, p, query)
 	if err != nil {
 		return nil, err
 	}
@@ -115,15 +52,26 @@ func (s *Service) SearchByProviderID(ctx context.Context, providerID, query stri
 	return &AbsMetadataResponse{Matches: matches}, nil
 }
 
-// getProvider helper to find a provider by ID.
+// getProvider helper to find a provider by ID. If not found, returns a void fallback.
 func (s *Service) getProvider(id string) Provider {
 	for _, p := range s.providers {
 		if p.ID() == id {
 			return p
 		}
 	}
-	return nil
+	return &voidProvider{id: id}
 }
+
+// voidProvider is a fallback provider that returns no results.
+type voidProvider struct {
+	id string
+}
+
+func (p *voidProvider) ID() string { return p.id }
+func (p *voidProvider) Search(_ context.Context, _ string) ([]AbsBookMetadata, error) {
+	return []AbsBookMetadata{}, nil
+}
+func (p *voidProvider) CacheTTL() time.Duration { return 24 * time.Hour }
 
 // searchProviderWithCache handles the caching logic for provider searches.
 func (s *Service) searchProviderWithCache(ctx context.Context, p Provider, query string) ([]AbsBookMetadata, error) {

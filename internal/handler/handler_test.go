@@ -33,19 +33,22 @@ func (m *mockProvider) Search(_ context.Context, _ string) ([]service.AbsBookMet
 
 func TestSearch_WithQueryParam(t *testing.T) {
 	mock := &mockProvider{
-		id:      "test",
+		id:      "all",
 		results: []service.AbsBookMetadata{{Title: "Result", ISBN: "RJ123456"}},
 	}
 	svc := service.NewService(&mockCache{}, mock)
 	h := NewHandler(svc)
 
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/search", h.Search)
+
 	req := httptest.NewRequest(http.MethodGet, "/api/search?q=RJ123456", nil)
 	rec := httptest.NewRecorder()
 
-	h.Search(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
 	var resp service.AbsMetadataResponse
@@ -59,16 +62,19 @@ func TestSearch_WithQueryParam(t *testing.T) {
 
 func TestSearch_WithQueryFallbackParam(t *testing.T) {
 	mock := &mockProvider{
-		id:      "test",
+		id:      "all",
 		results: []service.AbsBookMetadata{{Title: "Fallback"}},
 	}
 	svc := service.NewService(&mockCache{}, mock)
 	h := NewHandler(svc)
 
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/search", h.Search)
+
 	req := httptest.NewRequest(http.MethodGet, "/api/search?query=test", nil)
 	rec := httptest.NewRecorder()
 
-	h.Search(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
@@ -79,10 +85,13 @@ func TestSearch_MissingQuery(t *testing.T) {
 	svc := service.NewService(&mockCache{})
 	h := NewHandler(svc)
 
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/search", h.Search)
+
 	req := httptest.NewRequest(http.MethodGet, "/api/search", nil)
 	rec := httptest.NewRecorder()
 
-	h.Search(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", rec.Code)
@@ -91,20 +100,22 @@ func TestSearch_MissingQuery(t *testing.T) {
 
 func TestSearch_ProviderError(t *testing.T) {
 	mock := &mockProvider{
-		id:  "test",
+		id:  "all",
 		err: errors.New("provider failure"),
 	}
 	svc := service.NewService(&mockCache{}, mock)
 	h := NewHandler(svc)
 
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/search", h.Search)
+
 	req := httptest.NewRequest(http.MethodGet, "/api/search?q=test", nil)
 	rec := httptest.NewRecorder()
 
-	h.Search(rec, req)
+	mux.ServeHTTP(rec, req)
 
-	// Search aggregates errors — it logs and continues, so it returns 200 with empty matches.
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected 200 (aggregated search skips errors), got %d", rec.Code)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 when 'all' provider fails, got %d", rec.Code)
 	}
 }
 
@@ -116,10 +127,13 @@ func TestSearchSingle_ValidQuery(t *testing.T) {
 	svc := service.NewService(&mockCache{}, mock)
 	h := NewHandler(svc)
 
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/{provider}/search", h.Search)
+
 	req := httptest.NewRequest(http.MethodGet, "/api/dlsite/search?q=RJ123456", nil)
 	rec := httptest.NewRecorder()
 
-	h.SearchSingle(rec, req, "dlsite")
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
@@ -134,30 +148,25 @@ func TestSearchSingle_ValidQuery(t *testing.T) {
 	}
 }
 
-func TestSearchSingle_MissingQuery(t *testing.T) {
-	svc := service.NewService(&mockCache{})
-	h := NewHandler(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/dlsite/search", nil)
-	rec := httptest.NewRecorder()
-
-	h.SearchSingle(rec, req, "dlsite")
-
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected 400, got %d", rec.Code)
-	}
-}
-
 func TestSearchSingle_UnknownProvider(t *testing.T) {
 	svc := service.NewService(&mockCache{})
 	h := NewHandler(svc)
 
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/{provider}/search", h.Search)
+
 	req := httptest.NewRequest(http.MethodGet, "/api/unknown/search?q=test", nil)
 	rec := httptest.NewRecorder()
 
-	h.SearchSingle(rec, req, "unknown")
+	mux.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("expected 500, got %d", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 (fallback to void), got %d", rec.Code)
+	}
+
+	var resp service.AbsMetadataResponse
+	_ = json.NewDecoder(rec.Body).Decode(&resp)
+	if len(resp.Matches) != 0 {
+		t.Errorf("expected 0 matches, got %d", len(resp.Matches))
 	}
 }

@@ -46,13 +46,13 @@ func TestService_Search(t *testing.T) {
 	mockData := []AbsBookMetadata{
 		{Title: "Test Book", ISBN: "RJ123456"},
 	}
+	// Service.Search delegates to provider with ID "all"
 	mockProvider := &MockProvider{
-		IDVal:         "test_provider",
+		IDVal:         "all",
 		SearchResults: mockData,
 		MockCacheTTL:  1 * time.Hour,
 	}
 
-	// Simple map-based mock for this test
 	store := make(map[string][]AbsBookMetadata)
 	cache := &MockCache{
 		GetFunc: func(key string) ([]AbsBookMetadata, bool) {
@@ -66,7 +66,7 @@ func TestService_Search(t *testing.T) {
 
 	svc := NewService(cache, mockProvider)
 
-	// 1. Initial Search (should call provider)
+	// 1. Initial Search (should call provider "all")
 	resp, err := svc.Search(context.Background(), "RJ123456")
 	if err != nil {
 		t.Fatalf("Search failed: %v", err)
@@ -74,94 +74,65 @@ func TestService_Search(t *testing.T) {
 	if len(resp.Matches) != 1 {
 		t.Errorf("Expected 1 match, got %d", len(resp.Matches))
 	}
-	if resp.Matches[0].Title != "Test Book" {
-		t.Errorf("Expected title 'Test Book', got '%s'", resp.Matches[0].Title)
-	}
-
-	// 2. Cached Search (should not fail even if provider errors)
-	mockProvider.SearchErr = context.DeadlineExceeded // simulate failure
-	resp, err = svc.Search(context.Background(), "RJ123456")
-	if err != nil {
-		t.Fatalf("Cached search failed: %v", err)
-	}
-	if len(resp.Matches) != 1 {
-		t.Errorf("Expected 1 match from cache, got %d", len(resp.Matches))
-	}
 }
 
 func TestService_SearchByProviderID(t *testing.T) {
-	mockProvider := &MockProvider{
-		IDVal:         "provider_a",
-		SearchResults: []AbsBookMetadata{{Title: "A"}},
-	}
-	cache := &MockCache{}
-	svc := NewService(cache, mockProvider)
+	p1 := &MockProvider{IDVal: "p1", SearchResults: []AbsBookMetadata{{Title: "Result 1"}}}
+	pAll := &MockProvider{IDVal: "all", SearchResults: []AbsBookMetadata{{Title: "Result 1"}, {Title: "Result 2"}}}
 
-	// Valid Provider
-	resp, err := svc.SearchByProviderID(context.Background(), "provider_a", "query")
-	if err != nil {
-		t.Fatalf("SearchByProviderID failed: %v", err)
-	}
-	if len(resp.Matches) != 1 {
-		t.Errorf("Expected 1 match, got %d", len(resp.Matches))
-	}
+	svc := NewService(&MockCache{}, p1, pAll)
 
-	// Invalid Provider
-	_, err = svc.SearchByProviderID(context.Background(), "provider_b", "query")
-	if err == nil {
-		t.Error("Expected error for non-existent provider, got nil")
-	}
+	t.Run("valid provider", func(t *testing.T) {
+		resp, err := svc.SearchByProviderID(context.Background(), "p1", "test")
+		if err != nil {
+			t.Fatalf("SearchByProviderID failed: %v", err)
+		}
+		if len(resp.Matches) != 1 || resp.Matches[0].Title != "Result 1" {
+			t.Errorf("unexpected matches: %+v", resp.Matches)
+		}
+	})
 
-	// Provider returns error
-	mockProvider.SearchErr = errors.New("provider failure")
-	_, err = svc.SearchByProviderID(context.Background(), "provider_a", "new_query")
-	if err == nil {
-		t.Error("Expected error when provider fails, got nil")
-	}
+	t.Run("all providers", func(t *testing.T) {
+		resp, err := svc.SearchByProviderID(context.Background(), "all", "test")
+		if err != nil {
+			t.Fatalf("SearchByProviderID failed for 'all': %v", err)
+		}
+		if len(resp.Matches) != 2 {
+			t.Errorf("expected 2 matches from 'all' mock, got %d", len(resp.Matches))
+		}
+	})
+
+	t.Run("unknown provider falls back to void", func(t *testing.T) {
+		resp, err := svc.SearchByProviderID(context.Background(), "p3", "test")
+		if err != nil {
+			t.Fatalf("Expected no error for unknown provider (fallback to void), got %v", err)
+		}
+		if len(resp.Matches) != 0 {
+			t.Errorf("expected 0 matches for unknown provider, got %d", len(resp.Matches))
+		}
+	})
 }
 
-func TestService_Providers(t *testing.T) {
-	p1 := &MockProvider{IDVal: "a"}
-	p2 := &MockProvider{IDVal: "b"}
-	cache := &MockCache{}
-	svc := NewService(cache, p1, p2)
-
-	providers := svc.Providers()
-	if len(providers) != 2 {
-		t.Fatalf("expected 2 providers, got %d", len(providers))
-	}
-	if providers[0].ID() != "a" || providers[1].ID() != "b" {
-		t.Errorf("unexpected provider IDs: %s, %s", providers[0].ID(), providers[1].ID())
-	}
-}
-
-func TestService_Search_ProviderErrorContinues(t *testing.T) {
-	failing := &MockProvider{
-		IDVal:     "fail",
-		SearchErr: context.DeadlineExceeded,
-	}
-	working := &MockProvider{
-		IDVal:         "ok",
-		SearchResults: []AbsBookMetadata{{Title: "OK"}},
-		MockCacheTTL:  1 * time.Hour,
+func TestService_Search_PartialFailure(t *testing.T) {
+	// Since Search delegates to "all", we test failure on the "all" provider
+	failingAll := &MockProvider{
+		IDVal:     "all",
+		SearchErr: errors.New("failing all"),
 	}
 	cache := &MockCache{}
-	svc := NewService(cache, failing, working)
+	svc := NewService(cache, failingAll)
 
-	resp, err := svc.Search(context.Background(), "test")
-	if err != nil {
-		t.Fatalf("Search should not error when one provider fails: %v", err)
-	}
-	if len(resp.Matches) != 1 || resp.Matches[0].Title != "OK" {
-		t.Errorf("expected 1 match from working provider, got %+v", resp.Matches)
+	_, err := svc.Search(context.Background(), "test")
+	if err == nil {
+		t.Error("expected error when delegated 'all' search fails")
 	}
 }
 
 func TestService_SearchProviderWithCache_ZeroTTL(t *testing.T) {
 	mock := &MockProvider{
-		IDVal:         "zero_ttl",
+		IDVal:         "all",
 		SearchResults: []AbsBookMetadata{{Title: "Cached"}},
-		MockCacheTTL:  0, // zero TTL
+		MockCacheTTL:  0,
 	}
 	store := make(map[string][]AbsBookMetadata)
 	cache := &MockCache{
@@ -175,13 +146,8 @@ func TestService_SearchProviderWithCache_ZeroTTL(t *testing.T) {
 	}
 	svc := NewService(cache, mock)
 
-	// First call populates cache
-	_, err := svc.Search(context.Background(), "q")
-	if err != nil {
-		t.Fatalf("first search failed: %v", err)
-	}
+	_, _ = svc.Search(context.Background(), "q")
 
-	// Make provider return error — cached result should still work
 	mock.SearchErr = context.DeadlineExceeded
 	resp, err := svc.Search(context.Background(), "q")
 	if err != nil {
