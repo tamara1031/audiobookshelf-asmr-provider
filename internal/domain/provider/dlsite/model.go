@@ -39,4 +39,8 @@ type AsmrWork struct {
 	Price       int
 	ReleaseDate string
 	DLsiteURL   string
+	Series      string
+	Scenario    string
+	WorkFormat  string
+	AgeRating   string
 }

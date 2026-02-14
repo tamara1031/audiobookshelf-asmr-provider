@@ -237,13 +237,15 @@ func (f *dlsiteFetcher) getWorkByID(ctx context.Context, code RJCode) (AsmrWork,
 	}
 
 	work := AsmrWork{
-		RJCode:    code,
-		DLsiteURL: targetURL,
-		Title:     f.extractTitle(doc),
-		Circle:    f.extractCircle(doc),
-		CoverURL:  f.extractCoverURL(doc),
+		RJCode:      code,
+		DLsiteURL:   targetURL,
+		Title:       f.extractTitle(doc),
+		Circle:      f.extractCircle(doc),
+		CoverURL:    f.extractCoverURL(doc),
+		Description: f.extractDescription(doc), // Description抽出を追加
 	}
 
+	// テーブルデータ（声優、ジャンル、シリーズ、シナリオ、形式、年齢）を一括取得
 	f.extractTableData(doc, &work)
 
 	return work, nil
@@ -274,28 +276,56 @@ func (f *dlsiteFetcher) extractTitle(doc *goquery.Document) string {
 	return strings.TrimSpace(doc.Find("#work_name").Text())
 }
 
+// extractDescription: 作品内容（あらすじ）を抽出。<br>を改行に変換して可読性を維持
+func (f *dlsiteFetcher) extractDescription(doc *goquery.Document) string {
+	// 作品内容の主要エリア
+	// ※通常は .work_parts_area だが、作品によっては .work_parts_type_text の中にある場合もあるため
+	//   最も確実な .work_parts_area をターゲットにします
+	selection := doc.Find(".work_parts_area").First()
+
+	if selection.Length() == 0 {
+		// 見つからない場合はmeta descriptionから取得（フォールバック）
+		return strings.TrimSpace(doc.Find(`meta[property="og:description"]`).AttrOr("content", ""))
+	}
+
+	// HTMLを取得して <br> を改行コードに置換
+	html, _ := selection.Html()
+	html = strings.ReplaceAll(html, "<br>", "\n")
+	html = strings.ReplaceAll(html, "<br/>", "\n")
+	html = strings.ReplaceAll(html, "<br />", "\n")
+
+	// タグを除去してテキストのみにする（簡易的なタグ除去）
+	// 注意: 厳密なサニタイズが必要な場合は bluemonday などのライブラリ推奨ですが、
+	// ここでは標準的な文字列置換とgoqueryのText()再パースで対応します
+	tmpDoc, _ := goquery.NewDocumentFromReader(strings.NewReader(html))
+	return strings.TrimSpace(tmpDoc.Text())
+}
+
 func (f *dlsiteFetcher) extractCircle(doc *goquery.Document) string {
 	return strings.TrimSpace(doc.Find("span.maker_name a").Text())
 }
 
 func (f *dlsiteFetcher) extractCoverURL(doc *goquery.Document) string {
-	// <meta property="og:image" content="..."> を探します
-	selection := doc.Find("meta[property='og:image']")
+	// 修正: アンダースコア(_) ではなく ハイフン(-) です
+	imgNode := doc.Find(".product-slider-data div").First()
 
-	// content属性の値（URL）を取得
-	content, exists := selection.Attr("content")
+	imgSrc, exists := imgNode.Attr("data-src")
+	if !exists {
+		imgSrc, _ = imgNode.Attr("src")
+	}
 
-	if exists && content != "" {
-		// 万が一 "//" から始まるURLだった場合の補完処理
-		if strings.HasPrefix(content, "//") {
-			return "https:" + content
+	// URLが見つかった場合の処理
+	if imgSrc != "" {
+		if strings.HasPrefix(imgSrc, "//") {
+			return "https:" + imgSrc
 		}
-		return content
+		return imgSrc
 	}
 
 	return ""
 }
 
+// extractTableData: テーブル情報から各フィールドへマッピング
 func (f *dlsiteFetcher) extractTableData(doc *goquery.Document, work *AsmrWork) {
 	doc.Find("#work_outline tr").Each(func(i int, s *goquery.Selection) {
 		header := strings.TrimSpace(s.Find("th").Text())
@@ -311,27 +341,54 @@ func (f *dlsiteFetcher) extractTableData(doc *goquery.Document, work *AsmrWork) 
 			})
 		} else if strings.Contains(header, "販売日") {
 			dateStr := strings.TrimSpace(data.Find("a").Text())
+			// 年月日フォーマットの整形
 			dateStr = strings.ReplaceAll(dateStr, "年", "-")
 			dateStr = strings.ReplaceAll(dateStr, "月", "-")
 			dateStr = strings.ReplaceAll(dateStr, "日", "")
 			work.ReleaseDate = dateStr
+		} else if strings.Contains(header, "シリーズ名") {
+			work.Series = strings.TrimSpace(data.Text())
+		} else if strings.Contains(header, "シナリオ") {
+			work.Scenario = strings.TrimSpace(data.Text())
+		} else if strings.Contains(header, "作品形式") {
+			work.WorkFormat = strings.TrimSpace(data.Text())
+		} else if strings.Contains(header, "年齢指定") {
+			work.AgeRating = strings.TrimSpace(data.Text())
 		}
 	})
 }
 
+// toAbsMetadata: AsmrWork から AbsBookMetadata への変換ロジック
 func (f *dlsiteFetcher) toAbsMetadata(work AsmrWork) service.AbsBookMetadata {
+	// Explicit判定: 年齢指定に「全年齢」が含まれていなければ true (R18など)
+	// ※ DLsiteの表記は "全年齢", "R-15", "18禁" など
+	isExplicit := !strings.Contains(work.AgeRating, "全年齢")
+
+	// Author: 基本は「シナリオ」。もし空なら「サークル名」をフォールバックとして使用
+	author := work.Scenario
+	if author == "" {
+		author = work.Circle
+	}
+
+	// Genres: 「作品形式」を格納 (AbsBookMetadataのGenresは[]stringなのでスライス化)
+	var genres []string
+	if work.WorkFormat != "" {
+		genres = []string{work.WorkFormat}
+	}
+
 	return service.AbsBookMetadata{
 		Title:         work.Title,
-		Author:        work.Circle,
-		Narrator:      strings.Join(work.CV, ", "),
-		Description:   work.Description,
+		Author:        author,                      // シナリオ (なければサークル)
+		Narrator:      strings.Join(work.CV, ", "), // 声優
+		Series:        work.Series,                 // シリーズ名
+		Description:   work.Description,            // 作品内容
+		Publisher:     work.Circle,                 // サークル名
 		PublishedYear: work.ReleaseDate,
-		Genres:        work.Tags,
-		Tags:          work.Tags,
+		Genres:        genres,    // 作品形式
+		Tags:          work.Tags, // ジャンル
 		Cover:         work.CoverURL,
 		ISBN:          work.RJCode.String(),
-		Explicit:      true,
+		Explicit:      isExplicit, // 年齢指定から判定
 		Language:      "Japanese",
-		Publisher:     "DLsite",
 	}
 }
