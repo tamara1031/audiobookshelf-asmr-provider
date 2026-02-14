@@ -124,20 +124,22 @@ The project is designed to be easily extensible. All providers are registered in
     Open `internal/domain/provider/registry.go` and add your provider to the `NewAll()` function:
 
     ```go
-    import (
         "audiobookshelf-asmr-provider/internal/domain/provider/all"
         "audiobookshelf-asmr-provider/internal/domain/provider/dlsite"
         "audiobookshelf-asmr-provider/internal/domain/provider/myprovider"
+        "audiobookshelf-asmr-provider/internal/domain/provider/void"
         "audiobookshelf-asmr-provider/internal/service"
     )
 
     func NewAll() []service.Provider {
         dlsiteProvider := dlsite.NewDLsiteFetcher()
         allProvider := all.NewProvider(dlsiteProvider)
+        voidProvider := void.NewProvider()
 
         return []service.Provider{
             dlsiteProvider,
             allProvider,
+            voidProvider,
             myprovider.NewProvider(), // ← Add your new provider here
         }
     }

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"time"
 )
@@ -41,7 +40,8 @@ func (s *Service) Search(ctx context.Context, query string) (*AbsMetadataRespons
 func (s *Service) SearchByProviderID(ctx context.Context, providerID, query string) (*AbsMetadataResponse, error) {
 	p := s.getProvider(providerID)
 	if p == nil {
-		return nil, fmt.Errorf("provider not found: %s", providerID)
+		// Provider not found, return valid empty result (void behavior)
+		return &AbsMetadataResponse{Matches: []AbsBookMetadata{}}, nil
 	}
 
 	matches, err := s.searchProviderWithCache(ctx, p, query)
@@ -49,29 +49,22 @@ func (s *Service) SearchByProviderID(ctx context.Context, providerID, query stri
 		return nil, err
 	}
 
+	if matches == nil {
+		matches = []AbsBookMetadata{}
+	}
 	return &AbsMetadataResponse{Matches: matches}, nil
+
 }
 
-// getProvider helper to find a provider by ID. If not found, returns a void fallback.
+// getProvider helper to find a provider by ID. If not found, returns nil.
 func (s *Service) getProvider(id string) Provider {
 	for _, p := range s.providers {
 		if p.ID() == id {
 			return p
 		}
 	}
-	return &voidProvider{id: id}
+	return nil
 }
-
-// voidProvider is a fallback provider that returns no results.
-type voidProvider struct {
-	id string
-}
-
-func (p *voidProvider) ID() string { return p.id }
-func (p *voidProvider) Search(_ context.Context, _ string) ([]AbsBookMetadata, error) {
-	return []AbsBookMetadata{}, nil
-}
-func (p *voidProvider) CacheTTL() time.Duration { return 24 * time.Hour }
 
 // searchProviderWithCache handles the caching logic for provider searches.
 func (s *Service) searchProviderWithCache(ctx context.Context, p Provider, query string) ([]AbsBookMetadata, error) {

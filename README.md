@@ -4,7 +4,7 @@ A specialized metadata provider for [Audiobookshelf](https://www.audiobookshelf.
 
 ## Features
 
-- **DLsite Integration**: Fetches comprehensive metadata (title, circle, voice actors, tags, description) from DLsite.
+- **DLsite Integration**: Fetches comprehensive metadata (title, circle, voice actors, tags, description) from DLsite. Supports RJ codes and keyword search.
 - **Audiobookshelf Compatible**: Exposes endpoints tailored for Audiobookshelf's custom metadata provider interface.
 - **Docker Support**: Ready-to-use Docker image for easy deployment.
 - **Microservice Architecture**: Designed to run alongside Audiobookshelf as a standalone service.

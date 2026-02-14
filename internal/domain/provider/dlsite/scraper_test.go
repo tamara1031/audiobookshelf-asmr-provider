@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -101,17 +102,6 @@ func TestDLsiteFetcher_CacheTTL(t *testing.T) {
 	}
 }
 
-func TestDLsiteFetcher_Search_NonRJQuery(t *testing.T) {
-	p := NewDLsiteFetcher()
-	results, err := p.Search(context.Background(), "some keyword")
-	if err != nil {
-		t.Fatalf("expected no error for keyword search, got: %v", err)
-	}
-	if results != nil {
-		t.Errorf("expected nil results for keyword search, got %v", results)
-	}
-}
-
 func TestDLsiteFetcher_Search_NetworkError(t *testing.T) {
 	f := newTestFetcher("http://127.0.0.1:1") // unreachable port
 
@@ -197,5 +187,47 @@ func TestDLsiteFetcher_ExtractCoverURL_NoCover(t *testing.T) {
 	}
 	if results[0].Cover != "" {
 		t.Errorf("expected empty cover, got %q", results[0].Cover)
+	}
+}
+
+func TestDLsiteFetcher_Search_Keyword(t *testing.T) {
+	mockHTML := `
+	<html><body>
+		<table id="search_result_list">
+			<tr>
+				<td class="work_name"><a href="https://www.dlsite.com/maniax/work/=/product_id/RJ999999.html">Keyword Match 1</a></td>
+				<td class="maker_name"><a href="#">Maker 1</a></td>
+			</tr>
+			<tr>
+				<td class="work_name"><a href="https://www.dlsite.com/maniax/work/=/product_id/RJ888888.html">Keyword Match 2</a></td>
+				<td class="maker_name"><a href="#">Maker 2</a></td>
+			</tr>
+		</table>
+	</body></html>`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/keyword/") {
+			t.Errorf("Expected keyword search path, got %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(mockHTML))
+	}))
+	defer server.Close()
+
+	f := newTestFetcher(server.URL)
+
+	results, err := f.Search(context.Background(), "some keyword")
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("Expected 2 results, got %d", len(results))
+	}
+
+	if results[0].Title != "Keyword Match 1" {
+		t.Errorf("Expected title 'Keyword Match 1', got '%s'", results[0].Title)
+	}
+	if results[0].ISBN != "RJ999999" {
+		t.Errorf("Expected ISBN 'RJ999999', got '%s'", results[0].ISBN)
 	}
 }

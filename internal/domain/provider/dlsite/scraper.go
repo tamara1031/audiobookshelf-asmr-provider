@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -46,8 +47,96 @@ func (f *dlsiteFetcher) Search(ctx context.Context, query string) ([]service.Abs
 		}
 		return []service.AbsBookMetadata{f.toAbsMetadata(work)}, nil
 	}
-	// Keyword search implementation would go here
-	return nil, nil
+	// Keyword search implementation
+	return f.searchKeywords(ctx, query)
+}
+
+func (f *dlsiteFetcher) searchKeywords(ctx context.Context, query string) ([]service.AbsBookMetadata, error) {
+	searchURL := fmt.Sprintf("%s/maniax/fs/=/keyword/%s", f.baseURL, query)
+
+	doc, err := f.fetchPage(ctx, searchURL)
+	if err != nil {
+		return nil, err
+	}
+
+	var results []service.AbsBookMetadata
+	extractor := regexp.MustCompile(`(?i)RJ\d{6,8}`)
+
+	// Try table format first (classic)
+	doc.Find("#search_result_list tr").Each(func(i int, s *goquery.Selection) {
+		title := strings.TrimSpace(s.Find(".work_name a").Text())
+		link, _ := s.Find(".work_name a").Attr("href")
+		maker := strings.TrimSpace(s.Find(".maker_name a").Text())
+
+		if title == "" {
+			return
+		}
+
+		// Extract RJ code from link
+		var rjCode string
+		if found := extractor.FindString(link); found != "" {
+			rjCode = found
+		} else {
+			// Fallback
+			if strings.Contains(link, "RJ") {
+				rjCode = extractor.FindString(link)
+			}
+		}
+
+		if title != "" && rjCode != "" {
+			results = append(results, service.AbsBookMetadata{
+				Title:     title,
+				Author:    maker,
+				ISBN:      rjCode,
+				Publisher: "DLsite",
+				Explicit:  true,
+				Language:  "Japanese",
+			})
+		}
+	})
+
+	// If no results from table, try grid format (n_worklist)
+	if len(results) == 0 {
+		doc.Find(".n_worklist li").Each(func(i int, s *goquery.Selection) {
+
+			title := strings.TrimSpace(s.Find(".work_name a").Text())
+			link, _ := s.Find(".work_name a").Attr("href")
+			maker := strings.TrimSpace(s.Find(".maker_name a").Text())
+
+			// Extract RJ code from link
+			var rjCode string
+			if found := extractor.FindString(link); found != "" {
+				rjCode = found
+			} else {
+				// Try to extract from the end of URL if regex didn't match directly
+				parts := strings.Split(link, "/")
+				for _, p := range parts {
+					if strings.HasPrefix(strings.ToUpper(p), "RJ") {
+						if strings.HasSuffix(p, ".html") {
+							rjCode = strings.TrimSuffix(p, ".html")
+						} else {
+							rjCode = p
+						}
+						break
+					}
+				}
+			}
+
+			if title != "" && rjCode != "" {
+				results = append(results, service.AbsBookMetadata{
+					Title:     title,
+					Author:    maker,
+					ISBN:      rjCode,
+					Publisher: "DLsite",
+					Explicit:  true,
+					Language:  "Japanese",
+					// We could extract more info here (cover, etc.) but let's start with basic
+				})
+			}
+		})
+	}
+
+	return results, nil
 }
 
 // getWorkByID fetches and parses the work page for a given RJ code.

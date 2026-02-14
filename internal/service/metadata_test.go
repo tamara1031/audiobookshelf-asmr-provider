@@ -102,13 +102,28 @@ func TestService_SearchByProviderID(t *testing.T) {
 		}
 	})
 
-	t.Run("unknown provider falls back to void", func(t *testing.T) {
+	t.Run("unknown provider returns empty result (void)", func(t *testing.T) {
 		resp, err := svc.SearchByProviderID(context.Background(), "p3", "test")
 		if err != nil {
-			t.Fatalf("Expected no error for unknown provider (fallback to void), got %v", err)
+			t.Fatalf("Expected no error for unknown provider, got %v", err)
 		}
 		if len(resp.Matches) != 0 {
 			t.Errorf("expected 0 matches for unknown provider, got %d", len(resp.Matches))
+		}
+	})
+
+	t.Run("nil matches returns empty slice", func(t *testing.T) {
+		pNil := &MockProvider{IDVal: "pNil", SearchResults: nil}
+		svcNil := NewService(&MockCache{}, pNil)
+		resp, err := svcNil.SearchByProviderID(context.Background(), "pNil", "test")
+		if err != nil {
+			t.Fatalf("SearchByProviderID failed: %v", err)
+		}
+		if resp.Matches == nil {
+			t.Error("Expected matches to be empty slice, got nil")
+		}
+		if len(resp.Matches) != 0 {
+			t.Errorf("Expected 0 matches, got %d", len(resp.Matches))
 		}
 	})
 }
