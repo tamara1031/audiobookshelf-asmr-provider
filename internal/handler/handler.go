@@ -44,12 +44,16 @@ func (h *Handler) _Search(w http.ResponseWriter, r *http.Request, providerID str
 		return
 	}
 
+	slog.Debug("Search request", "provider", providerID, "query", query, "url_params", r.URL.Query())
+
 	resp, err := h.service.SearchByProviderID(r.Context(), providerID, query)
 	if err != nil {
 		slog.Error("Search failed", "provider", providerID, "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	slog.Debug("Search response", "provider", providerID, "response", resp)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)

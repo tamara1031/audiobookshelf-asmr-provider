@@ -91,6 +91,8 @@ func (s *Service) searchProviderWithCache(ctx context.Context, p Provider, query
 		return nil, err
 	}
 
+	slog.Debug("Provider response", "provider", p.ID(), "count", len(matches), "results", matches)
+
 	// Save to Cache
 	ttl := p.CacheTTL()
 	if ttl == 0 {

@@ -17,11 +17,23 @@ import (
 )
 
 func main() {
-	// Initialize structured logging
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	slog.SetDefault(logger)
-
 	cfg := config.Load()
+
+	// Initialize structured logging with level from config
+	var level slog.Level
+	switch cfg.LogLevel {
+	case "DEBUG":
+		level = slog.LevelDebug
+	case "WARN":
+		level = slog.LevelWarn
+	case "ERROR":
+		level = slog.LevelError
+	default:
+		level = slog.LevelInfo
+	}
+
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
+	slog.SetDefault(logger)
 
 	providers := provider.NewAll()
 	slog.Info("Loaded providers", "count", len(providers))
