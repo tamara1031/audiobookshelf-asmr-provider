@@ -1,13 +1,14 @@
 package dlsite
 
 import (
-	"audiobookshelf-asmr-provider/internal/service"
 	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"audiobookshelf-asmr-provider/internal/service"
 )
 
 // newTestFetcher creates a dlsiteFetcher pointing at a test server URL.

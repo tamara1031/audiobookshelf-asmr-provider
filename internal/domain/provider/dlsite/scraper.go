@@ -251,10 +251,10 @@ func (f *dlsiteFetcher) getWorkByID(ctx context.Context, code RJCode) (AsmrWork,
 		Title:       f.extractTitle(doc),
 		Circle:      f.extractCircle(doc),
 		CoverURL:    f.extractCoverURL(doc),
-		Description: f.extractDescription(doc), // Description抽出を追加
+		Description: f.extractDescription(doc), // Added description extraction
 	}
 
-	// テーブルデータ（声優、ジャンル、シリーズ、シナリオ、形式、年齢）を一括取得
+	// Fetch all table data (voice actors, genres, series, scenario, format, age rating) at once
 	f.extractTableData(doc, &work)
 
 	return work, nil
@@ -287,27 +287,27 @@ func (f *dlsiteFetcher) extractTitle(doc *goquery.Document) string {
 	return strings.TrimSpace(doc.Find("#work_name").Text())
 }
 
-// extractDescription: 作品内容（あらすじ）を抽出。<br>を改行に変換して可読性を維持
+// extractDescription extracts the work description (synopsis). Converts <br> to newlines to maintain readability.
 func (f *dlsiteFetcher) extractDescription(doc *goquery.Document) string {
-	// 作品内容の主要エリア
-	// ※通常は .work_parts_area だが、作品によっては .work_parts_type_text の中にある場合もあるため
-	//   最も確実な .work_parts_area をターゲットにします
+	// Main area for work description
+	// * Usually .work_parts_area, but as it may be inside .work_parts_type_text depending on the work
+	//   targeting the most reliable .work_parts_area
 	selection := doc.Find(".work_parts_area").First()
 
 	if selection.Length() == 0 {
-		// 見つからない場合はmeta descriptionから取得（フォールバック）
+		// If not found, get from meta description (fallback)
 		return strings.TrimSpace(doc.Find(`meta[property="og:description"]`).AttrOr("content", ""))
 	}
 
-	// HTMLを取得して <br> を改行コードに置換
+	// Get HTML and replace <br> with newline characters
 	html, _ := selection.Html()
 	html = strings.ReplaceAll(html, "<br>", "\n")
 	html = strings.ReplaceAll(html, "<br/>", "\n")
 	html = strings.ReplaceAll(html, "<br />", "\n")
 
-	// タグを除去してテキストのみにする（簡易的なタグ除去）
-	// 注意: 厳密なサニタイズが必要な場合は bluemonday などのライブラリ推奨ですが、
-	// ここでは標準的な文字列置換とgoqueryのText()再パースで対応します
+	// Remove tags to get text only (simple tag removal)
+	// Note: For strict sanitization, libraries like bluemonday are recommended,
+	// but here we use standard string replacement and goquery's Text() re-parsing.
 	tmpDoc, _ := goquery.NewDocumentFromReader(strings.NewReader(html))
 	return strings.TrimSpace(tmpDoc.Text())
 }
@@ -317,7 +317,7 @@ func (f *dlsiteFetcher) extractCircle(doc *goquery.Document) string {
 }
 
 func (f *dlsiteFetcher) extractCoverURL(doc *goquery.Document) string {
-	// 修正: アンダースコア(_) ではなく ハイフン(-) です
+	// Fix: Use hyphen (-) instead of underscore (_)
 	imgNode := doc.Find(".product-slider-data div").First()
 
 	imgSrc, exists := imgNode.Attr("data-src")
@@ -325,7 +325,7 @@ func (f *dlsiteFetcher) extractCoverURL(doc *goquery.Document) string {
 		imgSrc, _ = imgNode.Attr("src")
 	}
 
-	// URLが見つかった場合の処理
+	// Processing when URL is found
 	if imgSrc != "" {
 		if strings.HasPrefix(imgSrc, "//") {
 			return "https:" + imgSrc
@@ -336,7 +336,7 @@ func (f *dlsiteFetcher) extractCoverURL(doc *goquery.Document) string {
 	return ""
 }
 
-// extractTableData: テーブル情報から各フィールドへマッピング
+// extractTableData maps from table information to each field
 func (f *dlsiteFetcher) extractTableData(doc *goquery.Document, work *AsmrWork) {
 	doc.Find("#work_outline tr").Each(func(i int, s *goquery.Selection) {
 		header := strings.TrimSpace(s.Find("th").Text())
@@ -352,13 +352,13 @@ func (f *dlsiteFetcher) extractTableData(doc *goquery.Document, work *AsmrWork) 
 			})
 		} else if strings.Contains(header, "販売日") {
 			dateStr := strings.TrimSpace(data.Find("a").Text())
-			// 年月日フォーマットの整形
+			// Format the date string
 			dateStr = strings.ReplaceAll(dateStr, "年", "-")
 			dateStr = strings.ReplaceAll(dateStr, "月", "-")
 			dateStr = strings.ReplaceAll(dateStr, "日", "")
 			work.ReleaseDate = dateStr
 		} else {
-			// 補助関数: td内のテキストを取得。リンクがある場合はそのテキストを優先
+			// Helper function: Get text within td. If there is a link, prioritize that text.
 			getText := func(d *goquery.Selection) string {
 				if a := d.Find("a"); a.Length() > 0 {
 					return strings.TrimSpace(a.First().Text())
@@ -379,24 +379,24 @@ func (f *dlsiteFetcher) extractTableData(doc *goquery.Document, work *AsmrWork) 
 	})
 }
 
-// toAbsMetadata: AsmrWork から AbsBookMetadata への変換ロジック
+// toAbsMetadata: Logic to convert AsmrWork to AbsBookMetadata
 func (f *dlsiteFetcher) toAbsMetadata(work AsmrWork) service.AbsBookMetadata {
-	// Explicit判定: 年齢指定に「全年齢」が含まれていなければ true (R18など)
+	// Explicit determination: true if "All Ages" (全年齢) is not included in age rating (e.g., R18)
 	isExplicit := !strings.Contains(work.AgeRating, "全年齢")
 
-	// Author: 基本は「シナリオ」。もし空なら「サークル名」をフォールバックとして使用
+	// Author: Default is "Scenario". If empty, uses "Circle Name" as fallback.
 	author := work.Scenario
 	if author == "" {
 		author = work.Circle
 	}
 
-	// Genres: 「作品形式」を格納
+	// Genres: Store "Work Format"
 	var genres []string
 	if work.WorkFormat != "" {
 		genres = []string{work.WorkFormat}
 	}
 
-	// Series: ABS仕様に合わせてオブジェクト配列に変換
+	// Series: Convert to object array for ABS specification
 	var series []service.SeriesMetadata
 	if work.Series != "" {
 		series = []service.SeriesMetadata{
@@ -404,8 +404,8 @@ func (f *dlsiteFetcher) toAbsMetadata(work AsmrWork) service.AbsBookMetadata {
 		}
 	}
 
-	// PublishedYear: シリーズ・出版年として「年（YYYY）」のみを抽出（ABSの互換性重視）
-	// YYYY-MM-DD から最初に向かって4文字取得
+	// PublishedYear: Extract only the "year (YYYY)" for ABS compatibility
+	// Get 4 characters from the beginning of YYYY-MM-DD
 	year := work.ReleaseDate
 	if len(year) >= 4 {
 		year = year[:4]

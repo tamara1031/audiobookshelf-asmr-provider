@@ -52,8 +52,8 @@ The application is configured via environment variables:
 | `DISABLE_AGE_CHECK` | Disable age verification (required for R15/R18 content). Set to `1`, `true`, or `yes` to disable. | `false` |
 
 > [!IMPORTANT]
-> **Fetching NSFW (R15/R18) Content**
-> To fetch metadata for adult content from providers like DLsite, you must set `DISABLE_AGE_CHECK` to `true` (or `1`, `yes`). If not set, requests may be blocked by age verification pages.
+> **NSFW (R15/R18) コンテンツの取得について**
+> DLsiteなどのプロバイダーから成人向けコンテンツのメタデータを取得するには、`DISABLE_AGE_CHECK` を `true` (または `1`, `yes`) に設定する必要があります。未設定の場合、年齢確認ページでブロックされ、メタデータが取得できない場合があります。
 
 ## Usage
 
@@ -74,12 +74,12 @@ The application is configured via environment variables:
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for instructions on how to add new metadata providers.
 
-## Disclaimer
+## 免責事項 (Disclaimer)
  
-This software is intended for personal management and organization of metadata for works owned by the user.
-The developer assumes no responsibility for any issues incurred (account suspension, legal action, etc.) as a result of using this software.
-When scraping, please check the terms of use of the target site and be careful not to put a high load on the server.
-In addition, redistributing or reprinting the obtained data (images, text, etc.) is prohibited by copyright law.
+本ソフトウェアは、ユーザーが所有する作品のメタデータを個人的に管理・整理する目的で作成されています。
+本ソフトウェアを使用して発生したいかなるトラブル（アカウント停止、法的措置など）についても、開発者は一切の責任を負いません。
+スクレイピングを行う際は、対象サイトの利用規約を確認し、サーバーに負荷をかけないよう注意してください。
+また、取得したデータ（画像、テキスト等）を再配布・転載することは著作権法で禁止されています。
 
 ## License
 
