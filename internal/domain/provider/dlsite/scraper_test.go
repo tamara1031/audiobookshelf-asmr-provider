@@ -96,7 +96,7 @@ func TestDLsiteFetcher_Search_RJCode(t *testing.T) {
 	}
 
 	result := results[0]
-	assertMetadata(t, result, "Test Work Title", "Test Scenario", "2023-01-01")
+	assertMetadata(t, result, "Test Work Title", "Test Scenario", "2023")
 	assertDetails(t, result)
 }
 
@@ -119,8 +119,8 @@ func assertDetails(t *testing.T, result service.AbsBookMetadata) {
 	if result.Description != "This is a\ntest description\nwith breaks." {
 		t.Errorf("Expected description 'This is a\\ntest description\\nwith breaks.', got '%q'", result.Description)
 	}
-	if result.Series != "Test Series" {
-		t.Errorf("Expected series 'Test Series', got '%s'", result.Series)
+	if len(result.Series) != 1 || result.Series[0].Series != "Test Series" {
+		t.Errorf("Expected series 'Test Series', got %v", result.Series)
 	}
 	if len(result.Genres) != 1 || result.Genres[0] != "Test Format" {
 		t.Errorf("Expected genres ['Test Format'], got %v", result.Genres)

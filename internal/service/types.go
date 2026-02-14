@@ -5,23 +5,27 @@ import (
 	"time"
 )
 
+// SeriesMetadata represents series information for a book.
+type SeriesMetadata struct {
+	Series   string `json:"series"`
+	Sequence string `json:"sequence,omitempty"`
+}
+
 // AbsBookMetadata represents the metadata structure used by Audiobookshelf.
 type AbsBookMetadata struct {
-	Title         string   `json:"title"`
-	Subtitle      string   `json:"subtitle,omitempty"`
-	Author        string   `json:"author"`
-	Narrator      string   `json:"narrator,omitempty"`
-	Series        string   `json:"series,omitempty"`
-	Description   string   `json:"description,omitempty"`
-	Publisher     string   `json:"publisher,omitempty"`
-	PublishedYear string   `json:"publishedYear,omitempty"`
-	Genres        []string `json:"genres,omitempty"`
-	Tags          []string `json:"tags,omitempty"`
-	Cover         string   `json:"cover,omitempty"`
-	ISBN          string   `json:"isbn,omitempty"`
-	ASIN          string   `json:"asin,omitempty"`
-	Language      string   `json:"language,omitempty"`
-	Explicit      bool     `json:"explicit,omitempty"`
+	Title         string           `json:"title"`
+	Author        string           `json:"author"`
+	Narrator      string           `json:"narrator,omitempty"`
+	Series        []SeriesMetadata `json:"series,omitempty"`
+	Description   string           `json:"description,omitempty"`
+	Publisher     string           `json:"publisher,omitempty"`
+	PublishedYear string           `json:"publishedYear,omitempty"`
+	Genres        []string         `json:"genres,omitempty"`
+	Tags          []string         `json:"tags,omitempty"`
+	Cover         string           `json:"cover,omitempty"`
+	ISBN          string           `json:"isbn,omitempty"`
+	Language      string           `json:"language,omitempty"`
+	Explicit      bool             `json:"explicit,omitempty"`
 }
 
 // AbsMetadataResponse represents the search response format for Audiobookshelf.

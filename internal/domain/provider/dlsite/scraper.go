@@ -382,7 +382,6 @@ func (f *dlsiteFetcher) extractTableData(doc *goquery.Document, work *AsmrWork) 
 // toAbsMetadata: AsmrWork から AbsBookMetadata への変換ロジック
 func (f *dlsiteFetcher) toAbsMetadata(work AsmrWork) service.AbsBookMetadata {
 	// Explicit判定: 年齢指定に「全年齢」が含まれていなければ true (R18など)
-	// ※ DLsiteの表記は "全年齢", "R-15", "18禁" など
 	isExplicit := !strings.Contains(work.AgeRating, "全年齢")
 
 	// Author: 基本は「シナリオ」。もし空なら「サークル名」をフォールバックとして使用
@@ -391,25 +390,40 @@ func (f *dlsiteFetcher) toAbsMetadata(work AsmrWork) service.AbsBookMetadata {
 		author = work.Circle
 	}
 
-	// Genres: 「作品形式」を格納 (AbsBookMetadataのGenresは[]stringなのでスライス化)
+	// Genres: 「作品形式」を格納
 	var genres []string
 	if work.WorkFormat != "" {
 		genres = []string{work.WorkFormat}
 	}
 
+	// Series: ABS仕様に合わせてオブジェクト配列に変換
+	var series []service.SeriesMetadata
+	if work.Series != "" {
+		series = []service.SeriesMetadata{
+			{Series: work.Series},
+		}
+	}
+
+	// PublishedYear: シリーズ・出版年として「年（YYYY）」のみを抽出（ABSの互換性重視）
+	// YYYY-MM-DD から最初に向かって4文字取得
+	year := work.ReleaseDate
+	if len(year) >= 4 {
+		year = year[:4]
+	}
+
 	return service.AbsBookMetadata{
 		Title:         work.Title,
-		Author:        author,                      // シナリオ (なければサークル)
-		Narrator:      strings.Join(work.CV, ", "), // 声優
-		Series:        work.Series,                 // シリーズ名
-		Description:   work.Description,            // 作品内容
-		Publisher:     work.Circle,                 // サークル名
-		PublishedYear: work.ReleaseDate,
-		Genres:        genres,    // 作品形式
-		Tags:          work.Tags, // ジャンル
+		Author:        author,
+		Narrator:      strings.Join(work.CV, ", "),
+		Series:        series,
+		Description:   work.Description,
+		Publisher:     work.Circle,
+		PublishedYear: year,
+		Genres:        genres,
+		Tags:          work.Tags,
 		Cover:         work.CoverURL,
 		ISBN:          work.RJCode.String(),
-		Explicit:      isExplicit, // 年齢指定から判定
+		Explicit:      isExplicit,
 		Language:      "Japanese",
 	}
 }
