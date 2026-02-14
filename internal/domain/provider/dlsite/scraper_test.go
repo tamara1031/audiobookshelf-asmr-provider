@@ -1,6 +1,7 @@
 package dlsite
 
 import (
+	"audiobookshelf-asmr-provider/internal/service"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -95,15 +96,23 @@ func TestDLsiteFetcher_Search_RJCode(t *testing.T) {
 	}
 
 	result := results[0]
-	if result.Title != "Test Work Title" {
-		t.Errorf("Expected title 'Test Work Title', got '%s'", result.Title)
+	assertMetadata(t, result, "Test Work Title", "Test Scenario", "2023-01-01")
+	assertDetails(t, result)
+}
+
+func assertMetadata(t *testing.T, result service.AbsBookMetadata, title, author, date string) {
+	if result.Title != title {
+		t.Errorf("Expected title %q, got %q", title, result.Title)
 	}
-	if result.Author != "Test Scenario" { // author should prioritize scenario
-		t.Errorf("Expected author 'Test Scenario', got '%s'", result.Author)
+	if result.Author != author {
+		t.Errorf("Expected author %q, got %q", author, result.Author)
 	}
-	if result.PublishedYear != "2023-01-01" {
-		t.Errorf("Expected date '2023-01-01', got '%s'", result.PublishedYear)
+	if result.PublishedYear != date {
+		t.Errorf("Expected date %q, got %q", date, result.PublishedYear)
 	}
+}
+
+func assertDetails(t *testing.T, result service.AbsBookMetadata) {
 	if result.Cover != "https://example.com/cover.jpg" {
 		t.Errorf("Expected cover 'https://example.com/cover.jpg', got '%s'", result.Cover)
 	}
@@ -549,7 +558,7 @@ func TestDLsiteFetcher_SeriesExtraction(t *testing.T) {
 			<div class="work_parts_area">Description</div>
 		`
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write([]byte(html))
+		_, _ = w.Write([]byte(html))
 	})
 
 	server := httptest.NewServer(mux)
@@ -583,7 +592,7 @@ func TestDLsiteFetcher_SeriesExtraction_NoLink(t *testing.T) {
 			<div class="work_parts_area">Description</div>
 		`
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write([]byte(html))
+		_, _ = w.Write([]byte(html))
 	})
 
 	server := httptest.NewServer(mux)
