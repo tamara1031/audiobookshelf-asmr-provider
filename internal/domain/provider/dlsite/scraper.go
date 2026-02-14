@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -15,17 +16,25 @@ import (
 )
 
 type dlsiteFetcher struct {
-	client  *http.Client
-	baseURL string
+	client           *http.Client
+	baseURL          string
+	ageCheckDisabled bool
 }
 
 // NewDLsiteFetcher creates a new instance of the DLsite provider.
 func NewDLsiteFetcher() service.Provider {
+	disableAgeCheck := false
+	ageCheckEnv := strings.ToLower(os.Getenv("DISABLE_AGE_CHECK"))
+	if ageCheckEnv == "1" || ageCheckEnv == "true" || ageCheckEnv == "yes" {
+		disableAgeCheck = true
+	}
+
 	return &dlsiteFetcher{
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		baseURL: "https://www.dlsite.com",
+		baseURL:          "https://www.dlsite.com",
+		ageCheckDisabled: disableAgeCheck,
 	}
 }
 
@@ -256,7 +265,9 @@ func (f *dlsiteFetcher) fetchPage(ctx context.Context, url string) (*goquery.Doc
 	if err != nil {
 		return nil, err
 	}
-	req.AddCookie(&http.Cookie{Name: "adult_checked", Value: "1"})
+	if f.ageCheckDisabled {
+		req.AddCookie(&http.Cookie{Name: "adult_checked", Value: "1"})
+	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
 
 	resp, err := f.client.Do(req)
@@ -346,14 +357,24 @@ func (f *dlsiteFetcher) extractTableData(doc *goquery.Document, work *AsmrWork) 
 			dateStr = strings.ReplaceAll(dateStr, "月", "-")
 			dateStr = strings.ReplaceAll(dateStr, "日", "")
 			work.ReleaseDate = dateStr
-		} else if strings.Contains(header, "シリーズ名") {
-			work.Series = strings.TrimSpace(data.Text())
-		} else if strings.Contains(header, "シナリオ") {
-			work.Scenario = strings.TrimSpace(data.Text())
-		} else if strings.Contains(header, "作品形式") {
-			work.WorkFormat = strings.TrimSpace(data.Text())
-		} else if strings.Contains(header, "年齢指定") {
-			work.AgeRating = strings.TrimSpace(data.Text())
+		} else {
+			// 補助関数: td内のテキストを取得。リンクがある場合はそのテキストを優先
+			getText := func(d *goquery.Selection) string {
+				if a := d.Find("a"); a.Length() > 0 {
+					return strings.TrimSpace(a.First().Text())
+				}
+				return strings.TrimSpace(d.Text())
+			}
+
+			if strings.Contains(header, "シリーズ") {
+				work.Series = getText(data)
+			} else if strings.Contains(header, "シナリオ") {
+				work.Scenario = getText(data)
+			} else if strings.Contains(header, "作品形式") {
+				work.WorkFormat = getText(data)
+			} else if strings.Contains(header, "年齢指定") {
+				work.AgeRating = getText(data)
+			}
 		}
 	})
 }

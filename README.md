@@ -49,14 +49,15 @@ The application is configured via environment variables:
 | :--- | :--- | :--- |
 | `PORT` | The port the server listens on. | `8080` |
 | `LOG_LEVEL` | Logging verbosity (`DEBUG`, `INFO`, `WARN`, `ERROR`). | `INFO` |
+| `DISABLE_AGE_CHECK` | Disable age verification (required for R18 content). Set to `1`, `true`, or `yes` to disable. | `false` |
 
 ## Usage
 
 ### API Endpoints
 
-- **`GET /health`**: Health check endpoint. Returns `200 OK`.
-- **`GET /api/search?q={query}`**: Search across all configured providers. Supports `q` or `query` parameter.
-- **`GET /api/{provider}/search?q={query}`**: Search a specific provider (e.g., `/api/dlsite/search`).
+-   **`GET /health`**: Health check endpoint. Returns `200 OK`.
+-   **`GET /api/search?q={query}`**: Search across all configured providers. Supports `q` or `query` parameter.
+-   **`GET /api/{provider}/search?q={query}`**: Search a specific provider (e.g., `/api/dlsite/search`).
 
 ### Audiobookshelf Configuration
 
@@ -68,6 +69,13 @@ The application is configured via environment variables:
 ## Contributing
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for instructions on how to add new metadata providers.
+
+## 免責事項 (Disclaimer)
+ 
+本ソフトウェアは、ユーザーが所有する作品のメタデータを個人的に管理・整理する目的で作成されています。
+本ソフトウェアを使用して発生したいかなるトラブル（アカウント停止、法的措置など）についても、開発者は一切の責任を負いません。
+スクレイピングを行う際は、対象サイトの利用規約を確認し、サーバーに負荷をかけないよう注意してください。
+また、取得したデータ（画像、テキスト等）を再配布・転載することは著作権法で禁止されています。
 
 ## License
 

@@ -13,7 +13,40 @@ import (
 func newTestFetcher(baseURL string) *dlsiteFetcher {
 	f := NewDLsiteFetcher().(*dlsiteFetcher)
 	f.baseURL = baseURL
+	f.ageCheckDisabled = true // Default to true for existing tests
 	return f
+}
+
+func TestDLsiteFetcher_AgeCheckCookie(t *testing.T) {
+	tests := []struct {
+		name     string
+		disabled bool
+		expected bool
+	}{
+		{"Disabled (Age check active)", false, false},
+		{"Enabled (Age check bypassed)", true, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				cookie, err := r.Cookie("adult_checked")
+				hasCookie := err == nil && cookie.Value == "1"
+				if hasCookie != tt.expected {
+					t.Errorf("expected adult_checked cookie: %v, got %v", tt.expected, hasCookie)
+				}
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`<html><body></body></html>`))
+			}))
+			defer server.Close()
+
+			f := NewDLsiteFetcher().(*dlsiteFetcher)
+			f.baseURL = server.URL
+			f.ageCheckDisabled = tt.disabled
+
+			_, _ = f.fetchPage(context.Background(), server.URL)
+		})
+	}
 }
 
 func TestDLsiteFetcher_Search_RJCode(t *testing.T) {
@@ -22,13 +55,18 @@ func TestDLsiteFetcher_Search_RJCode(t *testing.T) {
         <body>
             <h1 id="work_name">Test Work Title</h1>
             <span class="maker_name"><a href="#">Test Circle</a></span>
-            <div class="product_slider_data">
+            <div class="product-slider-data">
                 <div data-src="//example.com/cover.jpg"></div>
             </div>
+            <div class="work_parts_area">This is a<br>test description<br/>with breaks.</div>
             <table id="work_outline">
                 <tr><th>販売日</th><td><a href="#">2023年01月01日</a></td></tr>
                 <tr><th>ジャンル</th><td><a href="#">Tag1</a><a href="#">Tag2</a></td></tr>
                 <tr><th>声優</th><td><a href="#">Actor1</a></td></tr>
+                <tr><th>シリーズ名</th><td>Test Series</td></tr>
+                <tr><th>シナリオ</th><td>Test Scenario</td></tr>
+                <tr><th>作品形式</th><td>Test Format</td></tr>
+                <tr><th>年齢指定</th><td>R-18</td></tr>
             </table>
         </body>
     </html>
@@ -60,14 +98,29 @@ func TestDLsiteFetcher_Search_RJCode(t *testing.T) {
 	if result.Title != "Test Work Title" {
 		t.Errorf("Expected title 'Test Work Title', got '%s'", result.Title)
 	}
-	if result.Author != "Test Circle" {
-		t.Errorf("Expected author 'Test Circle', got '%s'", result.Author)
+	if result.Author != "Test Scenario" { // author should prioritize scenario
+		t.Errorf("Expected author 'Test Scenario', got '%s'", result.Author)
 	}
 	if result.PublishedYear != "2023-01-01" {
 		t.Errorf("Expected date '2023-01-01', got '%s'", result.PublishedYear)
 	}
 	if result.Cover != "https://example.com/cover.jpg" {
 		t.Errorf("Expected cover 'https://example.com/cover.jpg', got '%s'", result.Cover)
+	}
+	if result.Description != "This is a\ntest description\nwith breaks." {
+		t.Errorf("Expected description 'This is a\\ntest description\\nwith breaks.', got '%q'", result.Description)
+	}
+	if result.Series != "Test Series" {
+		t.Errorf("Expected series 'Test Series', got '%s'", result.Series)
+	}
+	if len(result.Genres) != 1 || result.Genres[0] != "Test Format" {
+		t.Errorf("Expected genres ['Test Format'], got %v", result.Genres)
+	}
+	if len(result.Tags) != 2 || result.Tags[0] != "Tag1" || result.Tags[1] != "Tag2" {
+		t.Errorf("Expected tags ['Tag1', 'Tag2'], got %v", result.Tags)
+	}
+	if !result.Explicit {
+		t.Errorf("Expected explicit: true for R-18, got false")
 	}
 }
 
@@ -114,7 +167,7 @@ func TestDLsiteFetcher_Search_NetworkError(t *testing.T) {
 func TestDLsiteFetcher_ExtractCoverURL_SrcFallback(t *testing.T) {
 	mockHTML := `
 	<html><body>
-		<div class="product_slider_data">
+		<div class="product-slider-data">
 			<div src="//example.com/fallback.jpg"></div>
 		</div>
 	</body></html>`
@@ -142,7 +195,7 @@ func TestDLsiteFetcher_ExtractCoverURL_SrcFallback(t *testing.T) {
 func TestDLsiteFetcher_ExtractCoverURL_AbsoluteURL(t *testing.T) {
 	mockHTML := `
 	<html><body>
-		<div class="product_slider_data">
+		<div class="product-slider-data">
 			<div data-src="https://example.com/absolute.jpg"></div>
 		</div>
 	</body></html>`
@@ -389,7 +442,7 @@ func TestDLsiteFetcher_Search_Keyword_FullMetadata(t *testing.T) {
         <body>
             <h1 id="work_name">Full Title</h1>
             <span class="maker_name"><a href="#">Full Circle</a></span>
-            <div class="product_slider_data">
+            <div class="product-slider-data">
                 <div data-src="//example.com/full_cover.jpg"></div>
             </div>
             <table id="work_outline">
@@ -397,9 +450,7 @@ func TestDLsiteFetcher_Search_Keyword_FullMetadata(t *testing.T) {
                 <tr><th>ジャンル</th><td><a href="#">Full Tag</a></td></tr>
                 <tr><th>声優</th><td><a href="#">Full Actor</a></td></tr>
             </table>
-			<div class="main_header">
-				<p>Full Description</p>
-			</div>
+			<div class="work_parts_area">Full Description</div>
         </body>
     </html>`
 
@@ -441,5 +492,115 @@ func TestDLsiteFetcher_Search_Keyword_FullMetadata(t *testing.T) {
 	}
 	if res.Cover != "https://example.com/full_cover.jpg" {
 		t.Errorf("Expected full cover 'https://example.com/full_cover.jpg', got '%s'", res.Cover)
+	}
+}
+
+func TestDLsiteFetcher_ExtractDescription_Fallback(t *testing.T) {
+	mockHTML := `<html><head><meta property="og:description" content="Meta Description"></head><body></body></html>`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(mockHTML))
+	}))
+	defer server.Close()
+
+	f := newTestFetcher(server.URL)
+
+	results, err := f.Search(context.Background(), "RJ010101")
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+	if results[0].Description != "Meta Description" {
+		t.Errorf("Expected description 'Meta Description', got '%s'", results[0].Description)
+	}
+}
+
+func TestDLsiteFetcher_ExplicitLogic(t *testing.T) {
+	tests := []struct {
+		rating   string
+		expected bool
+	}{
+		{"全年齢", false},
+		{"R-15", true},
+		{"18禁", true},
+		{"", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.rating, func(t *testing.T) {
+			f := &dlsiteFetcher{}
+			work := AsmrWork{AgeRating: tt.rating}
+			meta := f.toAbsMetadata(work)
+			if meta.Explicit != tt.expected {
+				t.Errorf("expected explicit %v for rating %q, got %v", tt.expected, tt.rating, meta.Explicit)
+			}
+		})
+	}
+}
+func TestDLsiteFetcher_SeriesExtraction(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/maniax/work/=/product_id/RJ999999.html", func(w http.ResponseWriter, r *http.Request) {
+		html := `
+			<h1 id="work_name">Test Work</h1>
+			<span class="maker_name">Test Circle</span>
+			<table id="work_outline">
+				<tr><th>シリーズ名</th><td><a href="#">うちの子シリーズ</a></td></tr>
+			</table>
+			<div class="work_parts_area">Description</div>
+		`
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(html))
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	f := &dlsiteFetcher{
+		client:  server.Client(),
+		baseURL: server.URL,
+	}
+
+	rj, _ := NewRJCode("RJ999999")
+	work, err := f.getWorkByID(context.Background(), rj)
+	if err != nil {
+		t.Fatalf("Failed to get work: %v", err)
+	}
+
+	if work.Series != "うちの子シリーズ" {
+		t.Errorf("Expected Series 'うちの子シリーズ', got '%s'", work.Series)
+	}
+}
+
+func TestDLsiteFetcher_SeriesExtraction_NoLink(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/maniax/work/=/product_id/RJ999998.html", func(w http.ResponseWriter, r *http.Request) {
+		html := `
+			<h1 id="work_name">Test Work</h1>
+			<span class="maker_name">Test Circle</span>
+			<table id="work_outline">
+				<tr><th>シリーズ</th><td>Standalone Series</td></tr>
+			</table>
+			<div class="work_parts_area">Description</div>
+		`
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(html))
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	f := &dlsiteFetcher{
+		client:  server.Client(),
+		baseURL: server.URL,
+	}
+
+	rj, _ := NewRJCode("RJ999998")
+	work, err := f.getWorkByID(context.Background(), rj)
+	if err != nil {
+		t.Fatalf("Failed to get work: %v", err)
+	}
+
+	if work.Series != "Standalone Series" {
+		t.Errorf("Expected Series 'Standalone Series', got '%s'", work.Series)
 	}
 }
