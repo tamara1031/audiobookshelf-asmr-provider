@@ -27,6 +27,11 @@ This document outlines the steps to set up your development environment and cont
     ```
     The server will start on port 8080 by default.
 
+    To enable debug logging:
+    ```bash
+    LOG_LEVEL=DEBUG go run cmd/server/main.go
+    ```
+
 ## Testing
 
 We use the standard Go testing framework.

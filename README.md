@@ -9,6 +9,7 @@ A specialized metadata provider for [Audiobookshelf](https://www.audiobookshelf.
 - **Docker Support**: Ready-to-use Docker image for easy deployment.
 - **Microservice Architecture**: Designed to run alongside Audiobookshelf as a standalone service.
 - **In-Memory Caching**: built-in caching (1-hour TTL, max 10k items) to reduce load on upstream providers.
+- **Configurable Logging**: Adjust logging verbosity via environment variables for debugging or production monitoring.
 
 ## Installation
 
@@ -47,6 +48,7 @@ The application is configured via environment variables:
 | Variable | Description | Default |
 | :--- | :--- | :--- |
 | `PORT` | The port the server listens on. | `8080` |
+| `LOG_LEVEL` | Logging verbosity (`DEBUG`, `INFO`, `WARN`, `ERROR`). | `INFO` |
 
 ## Usage
 

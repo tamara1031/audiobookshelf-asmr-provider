@@ -48,6 +48,19 @@ Handles the delivery mechanism (HTTP).
 - **`handler.go`**: HTTP handlers that translate Audiobookshelf requests into service calls.
 - **Go 1.22+ Routing**: Uses descriptive patterns like `"GET /api/{provider}/search"` to automatically extract parameters.
 
+## Cross-Cutting Concerns
+
+### Logging
+
+The application uses structured logging via `log/slog`.
+- **Configuration**: Controlled by the `LOG_LEVEL` environment variable.
+- **Debug Mode**: When set to `DEBUG`, the application logs detailed request parameters, full response bodies, and specific provider interactions to aid in troubleshooting.
+
+### Error Handling
+
+- **Provider Failures**: Individual provider failures are logged but do not crash the application.
+- **Unknown Providers**: Requests for non-existent providers result in a defined fallback behavior (currently an empty success response) to maintain compatibility with clients that may blindly query known endpoints.
+
 ## Design Decisions
 
 - **Dependency Inversion Principle (DIP)**: High-level service modules do not depend on low-level provider modules. Both depend on abstractions.
