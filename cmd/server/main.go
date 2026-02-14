@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,12 +11,19 @@ import (
 
 	httphandler "audiobookshelf-asmr-provider/internal/adapter/http"
 	"audiobookshelf-asmr-provider/internal/adapter/provider"
+	"audiobookshelf-asmr-provider/internal/config"
 	"audiobookshelf-asmr-provider/internal/service"
 )
 
 func main() {
+	// Initialize structured logging
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
+
+	cfg := config.Load()
+
 	providers := provider.NewAll()
-	log.Printf("Loaded %d provider(s)", len(providers))
+	slog.Info("Loaded providers", "count", len(providers))
 
 	svc := service.NewService(providers...)
 	handler := httphandler.NewHandler(svc)
@@ -30,7 +37,7 @@ func main() {
 		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 			handler.SearchSingle(w, r, providerID)
 		})
-		log.Printf("Registered provider endpoint: %s", path)
+		slog.Debug("Registered provider endpoint", "path", path)
 	}
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -38,13 +45,8 @@ func main() {
 		_, _ = w.Write([]byte("OK"))
 	})
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-
 	srv := &http.Server{
-		Addr:         ":" + port,
+		Addr:         ":" + cfg.Port,
 		Handler:      mux,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
@@ -52,23 +54,25 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("Starting server on :%s", port)
+		slog.Info("Starting server", "port", cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server failed: %v", err)
+			slog.Error("Server failed", "error", err)
+			os.Exit(1)
 		}
 	}()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	<-quit
-	log.Println("Shutting down server...")
+	slog.Info("Shutting down server...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		slog.Error("Server forced to shutdown", "error", err)
+		os.Exit(1)
 	}
 
-	log.Println("Server exiting")
+	slog.Info("Server exiting")
 }

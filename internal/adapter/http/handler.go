@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"audiobookshelf-asmr-provider/internal/service"
@@ -29,34 +30,46 @@ func extractQuery(r *http.Request) string {
 func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 	query := extractQuery(r)
 	if query == "" {
+		slog.Warn("Search request missing query")
 		http.Error(w, "missing query", http.StatusBadRequest)
 		return
 	}
 
+	slog.Info("Handling search request", "query", query)
+
 	results, err := h.service.Search(r.Context(), query)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("Search failed", "error", err, "query", query)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(results)
+	if err := json.NewEncoder(w).Encode(results); err != nil {
+		slog.Error("Failed to encode search results", "error", err)
+	}
 }
 
 // SearchSingle handles search requests for a specific provider.
 func (h *Handler) SearchSingle(w http.ResponseWriter, r *http.Request, providerID string) {
 	query := extractQuery(r)
 	if query == "" {
+		slog.Warn("SearchSingle request missing query", "provider", providerID)
 		http.Error(w, "missing query", http.StatusBadRequest)
 		return
 	}
 
+	slog.Info("Handling single provider search request", "provider", providerID, "query", query)
+
 	results, err := h.service.SearchByProviderID(r.Context(), providerID, query)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("Single provider search failed", "provider", providerID, "error", err, "query", query)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(results)
+	if err := json.NewEncoder(w).Encode(results); err != nil {
+		slog.Error("Failed to encode single provider search results", "error", err, "provider", providerID)
+	}
 }

@@ -3,7 +3,8 @@ package service
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
+	"sync"
 	"time"
 
 	"audiobookshelf-asmr-provider/internal/domain"
@@ -12,7 +13,7 @@ import (
 // Service orchestrates metadata fetching from multiple providers with caching support.
 type Service struct {
 	providers []domain.Provider
-	cache     *Cache
+	cache     domain.Cache
 }
 
 // NewService creates a new metadata service with the given providers.
@@ -28,18 +29,33 @@ func (s *Service) Providers() []domain.Provider {
 	return s.providers
 }
 
-// Search queries all registered providers and returns aggregated results.
+// Search queries all registered providers and returns aggregated results in parallel.
 func (s *Service) Search(ctx context.Context, query string) (*domain.AbsMetadataResponse, error) {
-	var allMatches []domain.AbsBookMetadata
+	var (
+		wg         sync.WaitGroup
+		mu         sync.Mutex
+		allMatches []domain.AbsBookMetadata
+	)
 
-	for _, provider := range s.providers {
-		matches, err := s.searchProviderWithCache(ctx, provider, query)
-		if err != nil {
-			log.Printf("Error searching provider %s: %v", provider.ID(), err)
-			continue
-		}
-		allMatches = append(allMatches, matches...)
+	slog.Info("Starting aggregated search", "query", query, "providers_count", len(s.providers))
+
+	for _, p := range s.providers {
+		wg.Add(1)
+		go func(p domain.Provider) {
+			defer wg.Done()
+			matches, err := s.searchProviderWithCache(ctx, p, query)
+			if err != nil {
+				slog.Error("Provider search failed", "provider", p.ID(), "error", err)
+				return
+			}
+
+			mu.Lock()
+			allMatches = append(allMatches, matches...)
+			mu.Unlock()
+		}(p)
 	}
+
+	wg.Wait()
 
 	return &domain.AbsMetadataResponse{Matches: allMatches}, nil
 }
@@ -75,8 +91,11 @@ func (s *Service) searchProviderWithCache(ctx context.Context, p domain.Provider
 
 	// Check Cache
 	if data, ok := s.cache.Get(cacheKey); ok {
+		slog.Debug("Cache hit", "provider", p.ID(), "query", query)
 		return data, nil
 	}
+
+	slog.Debug("Fetching from provider", "provider", p.ID(), "query", query)
 
 	// Fetch from Provider
 	matches, err := p.Search(ctx, query)

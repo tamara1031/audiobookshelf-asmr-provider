@@ -1,6 +1,7 @@
 package service
 
 import (
+	"log/slog"
 	"sync"
 	"time"
 
@@ -57,6 +58,7 @@ func (c *Cache) Put(key string, data []domain.AbsBookMetadata, ttl time.Duration
 
 	// Size limit protection
 	if len(c.entries) > c.maxSize {
+		// Evict a random entry (map iteration order is random)
 		for k := range c.entries {
 			delete(c.entries, k)
 			break
@@ -69,11 +71,16 @@ func (c *Cache) EvictExpired() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	initialSize := len(c.entries)
 	now := time.Now()
 	for k, v := range c.entries {
 		if now.After(v.expiry) {
 			delete(c.entries, k)
 		}
+	}
+	evictedCount := initialSize - len(c.entries)
+	if evictedCount > 0 {
+		slog.Debug("Evicted expired cache entries", "count", evictedCount)
 	}
 }
 
@@ -87,6 +94,7 @@ func (c *Cache) Len() int {
 // startCleanup periodically removes expired entries.
 func (c *Cache) startCleanup() {
 	ticker := time.NewTicker(c.cleanupInterval)
+	defer ticker.Stop()
 	for range ticker.C {
 		c.EvictExpired()
 	}

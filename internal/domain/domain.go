@@ -40,3 +40,11 @@ type Provider interface {
 	// CacheTTL returns the duration for which results should be cached.
 	CacheTTL() time.Duration
 }
+
+// Cache defines the interface for a metadata cache.
+type Cache interface {
+	Get(key string) ([]AbsBookMetadata, bool)
+	Put(key string, data []AbsBookMetadata, ttl time.Duration)
+	EvictExpired()
+	Len() int
+}
