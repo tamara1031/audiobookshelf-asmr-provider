@@ -53,7 +53,7 @@ func (f *dlsiteFetcher) Search(ctx context.Context, query string) ([]service.Abs
 }
 
 func (f *dlsiteFetcher) searchKeywords(ctx context.Context, query string) ([]service.AbsBookMetadata, error) {
-	searchURL := fmt.Sprintf("%s/maniax/fs/=/keyword/%s", f.baseURL, url.PathEscape(query))
+	searchURL := fmt.Sprintf("%s/maniax/fs/=/keyword/%s", f.baseURL, url.QueryEscape(query))
 
 	doc, err := f.fetchPage(ctx, searchURL)
 	if err != nil {
