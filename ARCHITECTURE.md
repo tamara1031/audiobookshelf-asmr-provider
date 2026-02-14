@@ -8,17 +8,23 @@ The project follows a Clean Architecture / Hexagonal Architecture approach, sepa
 
 ## Directory Structure
 
+```text
 ├── cmd/
-│   └── server/        # Application entry point
+│   └── server/            # Application entry point
 ├── internal/
-│   ├── handler/       # HTTP handlers (formerly internal/api)
-│   ├── domain/        # Domain logic and providers
-│   │   ├── provider/  # External data providers (DLsite)
-│   │   └── cache/     # In-memory cache implementation
-│   ├── service/       # Application service layer (formerly internal/metadata)
-│   │   └── metadata.go # Service orchestration & domain models
-│   └── config/        # Configuration
-└── test/              # Integration tests
+│   ├── handler/           # HTTP delivery layer (formerly internal/api)
+│   ├── service/           # Application service layer
+│   │   ├── types.go       # Core abstractions (Provider/Cache) and domain models
+│   │   └── metadata.go    # Service orchestration logic
+│   ├── domain/            # Domain implementations
+│   │   ├── cache/         # Concrete caching implementations
+│   │   └── provider/      # Concrete metadata providers
+│   │       ├── all/       # Aggregation provider
+│   │       ├── dlsite/    # DLsite scraper
+│   │       ├── void/      # Fallback provider
+│   │       └── registry.go # Provider registration logic
+│   └── config/            # Configuration
+└── test/                  # Integration tests
 ```
 
 ## Key Components
@@ -26,30 +32,24 @@ The project follows a Clean Architecture / Hexagonal Architecture approach, sepa
 ### Service Layer (`internal/service`)
 
 Defines the core business logic and models.
-- **`metadata.go`**: Contains the `Service` struct, `Provider` and `Cache` interfaces, and the `AbsBookMetadata` model.
-- **`Service`**: Orchestrates parallel searches across providers.
+- **`types.go`**: Contains the `Provider` and `Cache` interfaces, and the `AbsBookMetadata` model. This is the "source of truth" for the application's domain.
+- **`Service`**: Orchestrates searches across providers. It implements the logic for single-provider and aggregated searches.
 
 ### Domain Layer (`internal/domain`)
 
-Contains concrete implementations of domain interfaces that aren't core service logic.
-- **`provider/`**: Concrete metadata providers (e.g., DLsite scraper).
+Contains concrete implementations of domain interfaces.
+- **`provider/`**: Houses all metadata providers.
+  - **`registry.go`**: A central point to register available providers.
 - **`cache/`**: Concrete cache implementation (MemoryCache).
 
 ### Handler Layer (`internal/handler`)
 
 Handles the delivery mechanism (HTTP).
 - **`handler.go`**: HTTP handlers that translate Audiobookshelf requests into service calls.
-
-**Caching Strategy**:
-- In-memory `map[string]cacheEntry` in `internal/domain/cache`.
-- Cache entries respect each provider's `CacheTTL()`.
-- A background goroutine in the cache implementation handles cleanup.
-
-### Server (`cmd/server`)
-
-Wires everything together. It initializes the adapters, injects them into the service, sets up the HTTP router, and starts the server.
+- **Go 1.22+ Routing**: Uses descriptive patterns like `"GET /api/{provider}/search"` to automatically extract parameters.
 
 ## Design Decisions
 
-- **Dependency Injection**: Dependencies (like the DLsite fetcher) are injected into the service, making testing easier.
+- **Dependency Inversion Principle (DIP)**: High-level service modules do not depend on low-level provider modules. Both depend on abstractions.
 - **Interface-Based Design**: The service relies on interfaces (`Provider`), allowing new providers to be added without modifying core logic.
+- **Parallel Execution**: Aggregated searches are executed in parallel using goroutines to minimize response time.

@@ -70,7 +70,7 @@ Refer to [ARCHITECTURE.md](ARCHITECTURE.md) for a detailed breakdown of the code
 
 ## Creating a New Provider
 
-The project is designed to be easily extensible. All providers are auto-discovered through a central registry, so `cmd/server/main.go` never needs to be modified.
+The project is designed to be easily extensible. All providers are registered in a central factory.
 
 ### Steps
 
@@ -78,7 +78,7 @@ The project is designed to be easily extensible. All providers are auto-discover
     Create a new directory under `internal/domain/provider/` (e.g., `internal/domain/provider/myprovider/`).
 
 2.  **Implement the `service.Provider` interface**:
-    The interface is defined in `internal/service/metadata.go`:
+    The interface is defined in `internal/service/types.go`:
 
     ```go
     type Provider interface {
@@ -103,7 +103,7 @@ The project is designed to be easily extensible. All providers are auto-discover
 
     type myFetcher struct{}
 
-    func NewMyFetcher() service.Provider {
+    func NewProvider() service.Provider {
         return &myFetcher{}
     }
 
@@ -111,7 +111,7 @@ The project is designed to be easily extensible. All providers are auto-discover
     func (f *myFetcher) CacheTTL() time.Duration   { return 24 * time.Hour }
     func (f *myFetcher) Search(ctx context.Context, query string) ([]service.AbsBookMetadata, error) {
         // your scraping / API logic here
-        return nil, nil
+        return []service.AbsBookMetadata{}, nil
     }
     ```
 
@@ -120,23 +120,28 @@ The project is designed to be easily extensible. All providers are auto-discover
 
     ```go
     import (
+        "audiobookshelf-asmr-provider/internal/domain/provider/all"
         "audiobookshelf-asmr-provider/internal/domain/provider/dlsite"
         "audiobookshelf-asmr-provider/internal/domain/provider/myprovider"
         "audiobookshelf-asmr-provider/internal/service"
     )
 
     func NewAll() []service.Provider {
+        dlsiteProvider := dlsite.NewDLsiteFetcher()
+        allProvider := all.NewProvider(dlsiteProvider)
+
         return []service.Provider{
-            dlsite.NewDLsiteFetcher(),
-            myprovider.NewMyFetcher(), // ← add here
+            dlsiteProvider,
+            allProvider,
+            myprovider.NewProvider(), // ← Add your new provider here
         }
     }
     ```
 
-    `main.go` calls `provider.NewAll()` automatically, so no other wiring is needed.
+    `main.go` calls `provider.NewAll()` and injects them into the service automatically.
 
 4.  **Test**:
-    Add unit tests alongside your scraper (e.g., `myprovider/scraper_test.go`).
+    Add unit tests alongside your scraper (e.g., `myprovider/ scraper_test.go`).
     Once registered, the provider endpoint is available at `/api/myprovider/search`.
 
 ## Contributing
