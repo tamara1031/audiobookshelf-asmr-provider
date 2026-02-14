@@ -279,6 +279,9 @@ func TestDLsiteFetcher_Search_AuthorNarratorSplit(t *testing.T) {
 					<span class="separator">/</span>
 					<span class="author"><a href="#">CV Name</a></span>
 				</td>
+				<td class="search_result_img_box_inner">
+					<img src="//example.com/thumb.jpg" />
+				</td>
 			</tr>
 		</table>
 	</body></html>`
@@ -306,6 +309,9 @@ func TestDLsiteFetcher_Search_AuthorNarratorSplit(t *testing.T) {
 	if res.Narrator != "CV Name" {
 		t.Errorf("Expected Narrator 'CV Name', got '%s'", res.Narrator)
 	}
+	if res.Cover != "https://example.com/thumb.jpg" {
+		t.Errorf("Expected Cover 'https://example.com/thumb.jpg', got '%s'", res.Cover)
+	}
 }
 
 func TestDLsiteFetcher_Search_AuthorNarratorSplit_Grid(t *testing.T) {
@@ -318,6 +324,9 @@ func TestDLsiteFetcher_Search_AuthorNarratorSplit_Grid(t *testing.T) {
 					<a href="#">Circle Grid</a>
 					<span class="separator">/</span>
 					<span class="author"><a href="#">CV Grid</a></span>
+				</div>
+				<div class="work_thumb_inner">
+					<img data-src="//example.com/grid_thumb.jpg" />
 				</div>
 			</li>
 		</ul>
@@ -345,5 +354,8 @@ func TestDLsiteFetcher_Search_AuthorNarratorSplit_Grid(t *testing.T) {
 	}
 	if res.Narrator != "CV Grid" {
 		t.Errorf("Expected Narrator 'CV Grid', got '%s'", res.Narrator)
+	}
+	if res.Cover != "https://example.com/grid_thumb.jpg" {
+		t.Errorf("Expected Cover 'https://example.com/grid_thumb.jpg', got '%s'", res.Cover)
 	}
 }

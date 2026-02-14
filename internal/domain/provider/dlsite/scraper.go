@@ -112,6 +112,19 @@ func (f *dlsiteFetcher) searchKeywords(ctx context.Context, query string) ([]ser
 			}
 		}
 
+		// Extract thumbnail
+		var coverURL string
+		img := s.Find(".search_result_img_box_inner img")
+		if src, exists := img.Attr("src"); exists {
+			coverURL = src
+		}
+		if dataSrc, exists := img.Attr("data-src"); exists && dataSrc != "" {
+			coverURL = dataSrc
+		}
+		if coverURL != "" && strings.HasPrefix(coverURL, "//") {
+			coverURL = "https:" + coverURL
+		}
+
 		if title != "" && rjCode != "" {
 			results = append(results, service.AbsBookMetadata{
 				Title:     title,
@@ -121,6 +134,7 @@ func (f *dlsiteFetcher) searchKeywords(ctx context.Context, query string) ([]ser
 				Publisher: "DLsite",
 				Explicit:  true,
 				Language:  "Japanese",
+				Cover:     coverURL,
 			})
 		}
 	})
@@ -169,6 +183,19 @@ func (f *dlsiteFetcher) searchKeywords(ctx context.Context, query string) ([]ser
 				}
 			}
 
+			// Extract thumbnail
+			var coverURL string
+			img := s.Find(".work_thumb_inner img")
+			if src, exists := img.Attr("src"); exists {
+				coverURL = src
+			}
+			if dataSrc, exists := img.Attr("data-src"); exists && dataSrc != "" {
+				coverURL = dataSrc
+			}
+			if coverURL != "" && strings.HasPrefix(coverURL, "//") {
+				coverURL = "https:" + coverURL
+			}
+
 			if title != "" && rjCode != "" {
 				results = append(results, service.AbsBookMetadata{
 					Title:     title,
@@ -178,7 +205,7 @@ func (f *dlsiteFetcher) searchKeywords(ctx context.Context, query string) ([]ser
 					Publisher: "DLsite",
 					Explicit:  true,
 					Language:  "Japanese",
-					// We could extract more info here (cover, etc.) but let's start with basic
+					Cover:     coverURL,
 				})
 			}
 		})
